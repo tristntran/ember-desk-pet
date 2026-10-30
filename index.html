@@ -158,6 +158,29 @@ img.ico{image-rendering:pixelated;display:block}
 #playBtn.spray.armed{background:#7ab8f0;color:#fff;animation:none;box-shadow:inset 0 -6px 0 #4a8ad0,0 0 0 3px #fff,0 4px 0 var(--wood-dd)}
 #stage.aiming #scene{cursor:crosshair}
 #stage.blaze::after{content:'';position:absolute;left:0;top:0;width:800px;height:380px;pointer-events:none;box-shadow:inset 0 0 70px 24px rgba(255,70,20,.55);animation:pulse .6s steps(2) infinite;z-index:4}
+#napPick .board{width:600px}
+.acts{display:flex;gap:6px;margin-top:10px}
+.act{flex:1;height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:15px;font-weight:600;background:var(--parch-l);border:3px solid var(--ink);box-shadow:inset 0 -5px 0 var(--parch-d)}
+.act img{width:28px;height:28px;object-fit:contain}
+.act.sel{background:var(--wood);color:#fff7e0;box-shadow:inset 0 -5px 0 var(--wood-d)}
+.naps{margin-top:10px}.nap{height:64px}
+.lbtn{margin-left:auto;height:36px;padding:0 12px 3px;font-size:15px;font-weight:600;background:var(--parch-l);border:3px solid var(--ink);box-shadow:inset 0 -4px 0 var(--parch-d)}
+.lbtn+.xbtn{margin-left:8px}
+#doneRate{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+#doneRate input{font-family:inherit;font-size:16px;padding:7px 10px;border:3px solid var(--ink);background:var(--parch-l);color:var(--ink);user-select:text;-webkit-user-select:text}
+#logbook .board{width:740px;height:450px}
+.lsum{display:flex;gap:8px;margin-top:10px}
+.lsum div{flex:1;background:var(--parch-l);border:3px solid var(--ink);padding:6px 8px 9px;text-align:center}
+.lsum b{display:block;font-size:22px}.lsum span{font-size:12px;opacity:.7}
+.lbars{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;margin-top:10px}
+.lb{display:flex;align-items:center;gap:6px;font-size:14px}.lb img{width:18px;height:18px}.lb .bar{flex:1;height:10px}.lb .bar i{background:var(--wood)}.lb span{width:52px;text-align:right;font-size:13px}
+.llist{flex:1;overflow-y:auto;touch-action:pan-y;margin-top:10px;border-top:3px solid var(--parch-d);padding-top:4px}
+.lday{font-size:13px;font-weight:700;opacity:.65;margin:8px 0 2px}
+.lrow{display:flex;align-items:center;gap:8px;font-size:15px;padding:3px 0;flex-wrap:wrap}.lrow img{width:18px;height:18px}
+.lt{width:64px;font-size:13px;opacity:.7}.lr{font-size:12px;padding:0 6px;border:2px solid var(--ink);background:var(--parch-l)}
+.lr.great{background:#c9ecb0}.lr.meh{background:#f4d0b0}.lr.stopped{opacity:.6}
+.ln{flex-basis:100%;padding-left:94px;font-size:13px;opacity:.8}
+.lempty{font-size:14px;opacity:.6;padding:8px 0}
 #dimmer{position:absolute;inset:0;background:rgba(0,0,8,.55);pointer-events:none;opacity:0;transition:opacity 1.5s;z-index:30}
 #dimmer.on{opacity:1}
 </style>
@@ -219,7 +242,8 @@ img.ico{image-rendering:pixelated;display:block}
 
   <div id="napPick" class="overlay hidden">
     <div class="board wood">
-      <div class="hhead"><h2>Nap timer</h2><span class="conn" id="napCount"></span><button class="xbtn" data-close="napPick">X</button></div>
+      <div class="hhead"><h2>Session</h2><span class="conn" id="napCount"></span><button class="lbtn" id="logBtn">Logbook</button><button class="xbtn" data-close="napPick">X</button></div>
+      <div class="acts" id="acts"></div>
       <div class="naps" id="naps"></div>
     </div>
   </div>
@@ -227,7 +251,17 @@ img.ico{image-rendering:pixelated;display:block}
     <div class="board wood">
       <div class="hhead"><h2 id="doneTitle">Nap's over!</h2><button class="xbtn" data-close="napDone">X</button></div>
       <div class="donemsg" id="doneMsg"></div>
+      <div id="doneRate"><div class="seg"></div><input type="text" id="doneNote" maxlength="140" placeholder="What did you get done? (optional)"></div>
       <div class="donebtns" id="doneBtns"></div>
+    </div>
+  </div>
+
+  <div id="logbook" class="overlay hidden">
+    <div class="board wood">
+      <div class="hhead"><h2>Logbook</h2><button class="lbtn" id="logCopy">Copy</button><button class="xbtn" data-close="logbook">X</button></div>
+      <div class="lsum" id="logSum"></div>
+      <div class="lbars" id="logBars"></div>
+      <div class="llist" id="logList"></div>
     </div>
   </div>
 
@@ -263,7 +297,7 @@ const CONFIG = {
   play: { minFuel:25, minRest:25 },
   // Cleaning is unpleasant: cleaning again within grudgeMin minutes makes it worse
   tidy: { grudgeMin:30 },
-  focus: { choices:[5,15,25,45,60], breakMin:5, onStart:[], onEnd:[] },
+  focus: { choices:[5,15,25,45,60], breakMin:5, onStart:[], onEnd:[], bpm:84, metronome:false },
   ha: {
     enabled: false,                                   // flip to true on your device
     url: 'ws://homeassistant.local:8123/api/websocket',
@@ -371,6 +405,10 @@ musicbox:["..k...k..","..kk..kk.","kkkkkkkkk","knnnnnnnk","kNNNNNNNk","kkkkkkkkk
 feather:[".......kk",".....kkpk","....kppwk","...kppwk.","..kppwk..",".kppwk...",".kpwk....",".kkk.....","N........"],
 imp:["k.......k","kk.....kk",".kkkkkkk.",".kyyyyyk.","kykkykkyk","kyyyyyyyk","kykyyykyk",".kykkkyk.","..kkkkk.."],
 spray:["..kkkk...","..kSSkkk.","..kkkkSk.","...kSk...","..kcbbk..",".kcbbbBk.",".kbbbbBk.",".kbbbbBk.",".kbbbbBk.","..kkkkk.."],
+laptop:[".kkkkkkk.",".kbcccbk.",".kcbccck.",".kkkkkkk.","kSSSSSSSk","kkkkkkkkk"],
+book:[".kkk.kkk.","kwwwkwwwk","kwSwkwSwk","kwwwkwwwk","kkkkkkkkk"],
+dumbbell:["kk.....kk","kSkkkkkSk","kSkkkkkSk","kk.....kk"],
+guitar:[".......kk","......kNk",".....kNk.",".kkkkNk..","knnnnk...","knnknk...","knnnnk...",".kkkk...."],
 grr:["..kkkkk..",".kSSSSSk.","kSSkSkSSk","kSSSSSSSk",".kkkkkkk.","...kyk...","..kyk....","...k....."],
 film:["kkkkkkkkk","kwkwkwkwk","kkkkkkkkk","kSSSSSSSk","kSSSSSSSk","kkkkkkkkk","kwkwkwkwk","kkkkkkkkk"],
 };
@@ -826,7 +864,7 @@ function hop(v=60){ if(R.pet==='lantern'){ pet.angV+=(Math.random()<0.5?-1:1)*v*
   if(pet.hop===0&&pet.hv===0){ pet.hv=-v*(R.pet==='candle'?0.7:1); pet.sx=0.85; pet.sy=1.22; } }
 function say(icon,t=2.2){ pet.bubble={icon,t,age:0}; }
 function walkTo(x,then,speed=22){ if(!mobile()){ if(then) then(); return; } pet.tx=clamp(x,R.range[0],R.range[1]); pet.state='walk'; pet.speed=speed; pet.onArrive=then||null; }
-function busy(){ return ['eat','play','tidy','mischief'].includes(pet.state)||(pet.state==='walk'&&pet.onArrive); }
+function busy(){ return ['eat','play','tidy','mischief','cowork'].includes(pet.state)||(pet.state==='walk'&&pet.onArrive); }
 function lowestNeed(){ let k=null,v=101; for(const n of ['fuel','joy','rest','tidy']) if(st()[n]<v){v=st()[n];k=n;} return {k,v}; }
 const NEED_ICON={fuel:'log',joy:'spark',rest:'moon',tidy:'broom'};
 function addFP(n){ S.fp=clamp(S.fp+n,0,1000); }
@@ -848,6 +886,7 @@ function idleThink(){
 /* ---- actions ---- */
 let food=null, ball=null, broom=null;
 function actFeed(){
+  if(pet.state==='cowork') return toast(`${S.name} is busy ${ACTS[S.timer.act].label.toLowerCase()} with you`);
   if(S.asleep){ say('zz'); return toast(`${S.name} is asleep… shh`); }
   if(busy()) return toast(`${S.name} is busy`);
   if(st().fuel>=97){ setExpr('meh',1.4); sfx('no'); return toast(`${S.name} is full!`); }
@@ -927,6 +966,7 @@ function tickle(){ const now=performance.now(); if(now-feather.lastT<260) return
   spawn({type:Math.random()<0.5?'heart':'note',x:pet.cxD+rand(-6,6),y:pet.bubY+4,vy:-16,life:1.1});
   if(R.pet==='lantern') pet.angV+=rand(-0.5,0.5); if(feather.count%3===0) hop(30); sfx('giggle'); }
 function actTidy(){
+  if(pet.state==='cowork') return toast(`Not now, you're in a session`);
   if(roomFires().length){ sfx('no'); return toast('Put the fire out first!'); }
   if(busy()) return toast(`${S.name} is busy`);
   if(st().tidy>=97) return toast(R.dirt.clean);
@@ -1002,45 +1042,121 @@ function goSleep(){ if(S.asleep) return; if(pet.state==='mischief'){ aiming=fals
 function wake(byUser){ if(!S.asleep) return; S.asleep=false; setTimeout(updateTimer,0); pet.state='idle'; pet.think=2; hop(55); pet.flare=1.6; burst(pet.cxD,pet.sparkY,14,'ember');
   if(byUser&&st().rest<50){ setExpr('meh',2.2); say('moon',2); } else setExpr('happy',1.6); sfx('wake'); updateHUD(); }
 function actSleep(){
-  if(S.asleep){ if(S.timer&&S.timer.mode==='focus') return stopTimer(); return wake(true); }
+  if(S.timer&&S.timer.mode==='focus') return stopTimer();
+  if(S.asleep) return wake(true);
   if(busy()) return toast(`${S.name} is busy`);
   openNapPick();
 }
-/* ---- focus naps (pomodoro-style sleep timer) ---- */
+/* ---- sessions: focus timer + body double ----
+   Pick an activity and a length. For "nap" Ember sleeps while you focus; for everything else
+   it does the activity with you (types, reads, lifts, strums). Finished sessions go in the logbook. */
+const ACTS={
+  nap:      {name:'Nap',      icon:'moon',     verb:'focused while Ember napped', label:'Focus nap'},
+  work:     {name:'Work',     icon:'laptop',   verb:'worked',                      label:'Working'},
+  study:    {name:'Study',    icon:'book',     verb:'studied',                     label:'Studying'},
+  exercise: {name:'Exercise', icon:'dumbbell', verb:'exercised',                   label:'Exercising'},
+  music:    {name:'Music',    icon:'guitar',   verb:'practiced music',             label:'Music'},
+};
+const RATINGS=[['great','Nailed it'],['ok','Some progress'],['meh','Got distracted']];
 const todayKey=()=>new Date().toDateString();
-function sessionsToday(){ return S.sessions&&S.sessions.date===todayKey()?S.sessions.n:0; }
+S.log=S.log||[];
+function sessionsToday(){ return S.log.filter(e=>new Date(e.start).toDateString()===todayKey()).length; }
+let pickAct=S.lastAct||'work';
 function openNapPick(){
   const last=S.lastNap||25;
-  $('#napCount').textContent=`${sessionsToday()} focus nap${sessionsToday()===1?'':'s'} today`;
+  $('#napCount').textContent=`${sessionsToday()} session${sessionsToday()===1?'':'s'} today`;
+  $('#acts').innerHTML=Object.entries(ACTS).map(([k,a])=>`<button class="act ${k===pickAct?'sel':''}" data-act2="${k}"><img class="ico" src="${ico(a.icon,4)}" alt="">${a.name}</button>`).join('');
   $('#naps').innerHTML=CONFIG.focus.choices.map(m=>`<button class="nap ${m===last?'last':''}" data-min="${m}"><b>${m}</b><span>minutes</span></button>`).join('')
-    +`<button class="nap" data-min="0"><b style="font-size:20px">Until rested</b><span>about ${Math.max(1,Math.round(restedInMs()/60000))} min</span></button>`;
-  $('#napPick').classList.remove('hidden'); sfx('ui');
+    +(pickAct==='nap'?`<button class="nap" data-min="0"><b style="font-size:20px">Until rested</b><span>about ${Math.max(1,Math.round(restedInMs()/60000))} min</span></button>`:'');
+  $('#napPick').classList.remove('hidden');
 }
+$('#acts').addEventListener('click',e=>{ const b=e.target.closest('.act'); if(!b) return; pickAct=b.dataset.act2; sfx('ui'); openNapPick(); });
 $('#naps').addEventListener('click',e=>{ const b=e.target.closest('.nap'); if(!b) return; $('#napPick').classList.add('hidden'); const m=+b.dataset.min;
-  if(!m){ S.timer=null; goSleep(); } else startFocus(m); });
+  if(!m){ S.timer=null; goSleep(); } else startFocus(m,pickAct); });
 function runHA(list){ (list||[]).forEach(([d,sv,data])=>Home.call(d,sv,data||{})); }
-function startFocus(m){ S.lastNap=m; S.timer={mode:'focus',end:Date.now()+m*60000,total:m*60000}; goSleep(); say('zz',2); toast(`Focus nap: ${m} min. Shh…`); runHA(CONFIG.focus.onStart); updateTimer(); save(); }
-function startBreak(m){ S.timer={mode:'break',end:Date.now()+m*60000,total:m*60000}; if(S.asleep) wake(false); say('note',2); toast(`${m}-minute break. Stretch!`); updateTimer(); save(); }
+function startFocus(m,act=S.lastAct||'work'){
+  S.lastNap=m; S.lastAct=act; pickAct=act; const now=Date.now();
+  S.timer={mode:'focus',act,start:now,end:now+m*60000,total:m*60000};
+  food=ball=broom=null; bubbles=[]; feather=null; music=null; pet.toy=null;
+  if(act==='nap'){ goSleep(); say('zz',2); toast(`Focus nap: ${m} min. Shh…`); }
+  else { if(S.asleep){ S.asleep=false; pet.sleepK=0.6; } pet.state='cowork'; pet.coT=0; pet.coBeat=0; pet.x=pet.tx=R.anchor.x; pet.lookUser=1.5; setExpr('happy',1.5); say(ACTS[act].icon,2);
+    toast(`${S.name} is ${ACTS[act].label.toLowerCase()} with you · ${m} min`); }
+  runHA(CONFIG.focus.onStart); updateTimer(); updateHUD(); save(); }
+function startBreak(m){ S.timer={mode:'break',start:Date.now(),end:Date.now()+m*60000,total:m*60000}; if(S.asleep) wake(false); if(pet.state==='cowork') pet.state='idle'; say('note',2); toast(`${m}-minute break. Stretch!`); updateTimer(); save(); }
+function logSession(t,minutes,rating,note){ if(minutes<1) return;
+  S.log.unshift({start:t.start||Date.now()-minutes*60000,min:Math.round(minutes),act:t.act||'nap',rating,note:(note||'').trim().slice(0,140)});
+  S.log=S.log.slice(0,1000); save(); }
 function stopTimer(){ const t=S.timer; if(!t) return; S.timer=null;
-  if(t.mode==='focus'){ runHA(CONFIG.focus.onEnd); wake(true); toast(`Woke early, ${Math.ceil((t.end-Date.now())/60000)} min were left`); }
-  else toast('Break ended'); updateTimer(); save(); }
+  if(t.mode==='focus'){ const done=(Date.now()-t.start)/60000; runHA(CONFIG.focus.onEnd); logSession(t,done,'stopped','');
+    if(t.act==='nap'||S.asleep) wake(true); else { pet.state='idle'; pet.think=2; }
+    toast(`Stopped early · ${Math.floor(done)} min logged`); }
+  else toast('Break ended'); updateTimer(); updateHUD(); save(); }
 function alarm(){ sfx('chime'); setTimeout(()=>sfx('chime'),900); setTimeout(()=>sfx('chime'),1800); }
 function timerDone(){
   const t=S.timer; S.timer=null; alarm(); uiWakeUntil=Date.now()+60000;
   if(t.mode==='focus'){
-    S.sessions={date:todayKey(),n:sessionsToday()+1}; addFP(5); runHA(CONFIG.focus.onEnd);
-    wake(false); setExpr('wow',2); say('bang',2.5); burst(pet.cxD,pet.sparkY,12,'ember'); for(let i=0;i<3;i++) spawn({type:'note',x:pet.cxD+rand(-8,8),y:pet.bubY,vy:-14,life:1.4});
-    showDone(`Focus nap done!`,`${S.name} slept for ${Math.round(t.total/60000)} minutes. That's ${sessionsToday()} today.`,
-      [[`${CONFIG.focus.breakMin}-min break`,()=>startBreak(CONFIG.focus.breakMin)],['Focus again',()=>startFocus(S.lastNap||25)],["I'm done",()=>{}]]);
+    addFP(5); fx({joy:+6}); runHA(CONFIG.focus.onEnd);
+    if(S.asleep) wake(false); else { pet.state='idle'; pet.think=3; }
+    setExpr('wow',2); say('bang',2.5); burst(pet.cxD,pet.sparkY,12,'ember'); for(let i=0;i<3;i++) spawn({type:'note',x:pet.cxD+rand(-8,8),y:pet.bubY,vy:-14,life:1.4});
+    const mins=Math.round(t.total/60000), A=ACTS[t.act||'nap'];
+    showDone(`Session done!`,`You ${A.verb} for ${mins} minutes${t.act&&t.act!=='nap'?` with ${S.name}`:''}. How did it go?`,
+      [[`${CONFIG.focus.breakMin}-min break`,()=>startBreak(CONFIG.focus.breakMin)],['Go again',()=>startFocus(S.lastNap||25,t.act)],["I'm done",()=>{}]],
+      (rating,note)=>logSession(t,mins,rating,note));
   } else {
     hop(50); say('bang',2);
-    showDone(`Break's over!`,`Ready for another focus nap?`,[['Focus again',()=>startFocus(S.lastNap||25)],['Not now',()=>{}]]);
+    showDone(`Break's over!`,`Ready for another ${ACTS[S.lastAct||'work'].name.toLowerCase()} session?`,[['Go again',()=>startFocus(S.lastNap||25,S.lastAct)],['Not now',()=>{}]]);
   }
-  updateTimer(); save();
+  updateTimer(); updateHUD(); save();
 }
-function showDone(title,msg,btns){ $('#doneTitle').textContent=title; $('#doneMsg').textContent=msg;
-  const box=$('#doneBtns'); box.innerHTML=''; btns.forEach(([label,fn])=>{ const b=document.createElement('button'); b.textContent=label; b.onclick=()=>{ $('#napDone').classList.add('hidden'); sfx('ui'); fn(); }; box.appendChild(b); });
+function showDone(title,msg,btns,onLog){ $('#doneTitle').textContent=title; $('#doneMsg').textContent=msg;
+  const rate=$('#doneRate'); let rating='great'; rate.classList.toggle('hidden',!onLog); $('#doneNote').value='';
+  rate.querySelector('.seg').innerHTML=RATINGS.map(([k,l])=>`<button data-r="${k}" class="${k===rating?'sel':''}">${l}</button>`).join('');
+  rate.querySelector('.seg').onclick=e=>{ const b=e.target.closest('button'); if(!b) return; rating=b.dataset.r; rate.querySelectorAll('.seg button').forEach(x=>x.classList.toggle('sel',x===b)); sfx('ui'); };
+  const box=$('#doneBtns'); box.innerHTML=''; btns.forEach(([label,fn])=>{ const b=document.createElement('button'); b.textContent=label;
+    b.onclick=()=>{ if(onLog) onLog(rating,$('#doneNote').value); onLog=null; $('#napDone').classList.add('hidden'); sfx('ui'); fn(); }; box.appendChild(b); });
+  $('#napDone').querySelector('[data-close]').onclick=()=>{ if(onLog) onLog(rating,$('#doneNote').value); onLog=null; };
   $('#napDone').classList.remove('hidden'); }
+
+/* ---- logbook ---- */
+const dayKey=ts=>{ const d=new Date(ts); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
+function streakDays(){ const days=new Set(S.log.map(e=>dayKey(e.start))); let n=0; const d=new Date(); if(!days.has(dayKey(d))) d.setDate(d.getDate()-1);
+  while(days.has(dayKey(d))){ n++; d.setDate(d.getDate()-1); } return n; }
+function openLog(){
+  const today=S.log.filter(e=>new Date(e.start).toDateString()===todayKey()), weekAgo=Date.now()-7*864e5, week=S.log.filter(e=>e.start>=weekAgo);
+  const sum=a=>a.reduce((t,e)=>t+e.min,0), byAct={}; week.forEach(e=>byAct[e.act]=(byAct[e.act]||0)+e.min); const maxA=Math.max(1,...Object.values(byAct));
+  const fmtM=m=>m>=60?`${Math.floor(m/60)}h ${m%60}m`:`${m}m`;
+  $('#logSum').innerHTML=`<div><b>${fmtM(sum(today))}</b><span>today</span></div><div><b>${fmtM(sum(week))}</b><span>this week</span></div><div><b>${S.log.length}</b><span>sessions</span></div><div><b>${streakDays()}</b><span>day streak</span></div>`;
+  $('#logBars').innerHTML=Object.entries(ACTS).filter(([k])=>byAct[k]).map(([k,a])=>`<div class="lb"><img class="ico" src="${ico(a.icon,2)}" alt="">${a.name}<div class="bar"><i style="width:${100*byAct[k]/maxA}%"></i></div><span>${fmtM(byAct[k])}</span></div>`).join('')||'<div class="lempty">No sessions this week yet.</div>';
+  const RL={great:'Nailed it',ok:'Some progress',meh:'Got distracted',stopped:'Stopped early'}; let lastDay='';
+  $('#logList').innerHTML=S.log.slice(0,80).map(e=>{ const d=new Date(e.start), day=d.toLocaleDateString([], {weekday:'short',month:'short',day:'numeric'});
+    const head=day!==lastDay?`<div class="lday">${day}</div>`:''; lastDay=day;
+    return head+`<div class="lrow"><img class="ico" src="${ico(ACTS[e.act]?.icon||'moon',2)}" alt=""><span class="lt">${d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</span><b>${ACTS[e.act]?.name||e.act} · ${e.min} min</b><span class="lr ${e.rating}">${RL[e.rating]||''}</span>${e.note?`<span class="ln">${e.note.replace(/</g,'&lt;')}</span>`:''}</div>`; }).join('')||'<div class="lempty">Finish a session and it shows up here.</div>';
+  $('#logbook').classList.remove('hidden'); sfx('ui');
+}
+function logText(){ return S.log.map(e=>`${new Date(e.start).toLocaleString()}\t${ACTS[e.act]?.name||e.act}\t${e.min} min\t${e.rating}\t${e.note||''}`).join('\n'); }
+$('#logBtn').addEventListener('click',()=>{ $('#napPick').classList.add('hidden'); openLog(); });
+$('#logCopy').addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(logText()); toast('Logbook copied'); }catch(e){ toast("Couldn't copy here"); } });
+
+/* ---- co-working animation ---- */
+function coworkTick(dt){
+  const p=pet, act=S.timer&&S.timer.act; if(!act||act==='nap'){ p.state='idle'; return; }
+  p.coT+=dt; p.facing=1; p.lookUser=Math.max(p.lookUser,0); if(!p.expr||p.exprT<0.2) setExpr(act==='exercise'?'squint':'normal',0.5);
+  if(act==='work'){ if(Math.random()<dt*7){ p.sy=0.94; spawn({type:'dust',col:'#e8eef4',x:p.cxD+9+rand(-3,3),y:p.coY-3,vx:rand(-4,4),vy:rand(-10,-4),g:20,life:0.3}); } if(Math.random()<dt/25) say('bulb',1.6); }
+  if(act==='study'){ if(p.coT%7<dt) p.flip=0.35; if(Math.random()<dt/30) say('bulb',1.6); if(Math.random()<dt/12) p.lookUser=1.2; }
+  if(act==='exercise'){ const ph=(p.coT%1.4)/1.4; p.lift=ph<0.5; p.sy=ph<0.5?1.12:0.86; if(Math.random()<dt*1.5) spawn({type:'water',x:p.cxD+rand(-6,6),y:p.sparkY+4,vx:rand(-12,12),vy:rand(-18,-8),g:90,life:0.5});
+    p.exAcc=(p.exAcc||0)+dt; if(p.exAcc>=60){ p.exAcc=0; fx({rest:-2,fuel:-1}); } }
+  if(act==='music'){ const beat=60/(CONFIG.focus.bpm||84); p.coBeat+=dt; if(p.coBeat>=beat){ p.coBeat-=beat; p.sy=0.9; p.beats=(p.beats||0)+1; if(p.beats%2===0) spawn({type:'note',x:p.cxD+rand(-6,10),y:p.bubY+2,vx:rand(-4,4),vy:-12,life:1.2});
+      if(CONFIG.focus.metronome) playSeq([[p.beats%4===1?1500:1000,0.03,'square']]); } setExpr('happy',0.3); }
+  p.flip=Math.max(0,(p.flip||0)-dt);
+}
+function drawCowork(c){
+  const p=pet, act=S.timer&&S.timer.mode==='focus'&&S.timer.act; if(p.state!=='cowork'||!act||act==='nap') return;
+  const base=R.pet==='lantern'?p.glowY+12:p.box[3]-2; p.coY=base; const x=p.cxD+(R.pet==='lantern'?10:9);
+  if(act==='work') drawMap(c,MAPS.laptop,x-1,base-6);
+  if(act==='study'){ drawMap(c,MAPS.book,x-1,base-5); if(p.flip>0){ c.fillStyle='#fffaf0'; c.fillRect(x+3,base-8+Math.round(p.flip*6),2,3); } }
+  if(act==='exercise') drawMap(c,MAPS.dumbbell,p.cxD-4,p.lift?p.topY-(R.pet==='ember'?6:3):base-4);
+  if(act==='music') drawMap(c,MAPS.guitar,x-3,base-8);
+}
 // How long until an untimed sleep ends: rest refills at 4/min, and he won't get up before morning
 function restedInMs(){ const need=Math.max(0,100-st().rest)/4*60000; let ms=need;
   if(S.settings.time==='live'){ const d=new Date(), h=d.getHours()+d.getMinutes()/60;
@@ -1053,8 +1169,8 @@ function updateTimer(){ const el=$('#timer'), t=S.timer;
     $('#tMode').textContent='Resting'; $('#tLeft').textContent=ms<1000?'soon':fmtLeft(ms); $('#tBar').style.width=st().rest+'%'; $('#tIco').src=ico('moon'); return; }
   el.classList.toggle('hidden',!t); if(!t) return;
   const left=Math.max(0,t.end-Date.now()), mm=Math.floor(left/60000), ss=Math.floor(left/1000)%60;
-  $('#tLeft').textContent=fmtLeft(left); $('#tMode').textContent=t.mode==='focus'?'Focus':'Break';
-  $('#tBar').style.width=(100*(1-left/t.total))+'%'; el.classList.toggle('brk',t.mode==='break'); $('#tIco').src=ico(t.mode==='focus'?'moon':'sun'); }
+  $('#tLeft').textContent=fmtLeft(left); $('#tMode').textContent=t.mode==='focus'?ACTS[t.act||'nap'].label.replace('Focus nap','Focus'):'Break';
+  $('#tBar').style.width=(100*(1-left/t.total))+'%'; el.classList.toggle('brk',t.mode==='break'); $('#tIco').src=ico(t.mode==='focus'?ACTS[t.act||'nap'].icon:'sun'); }
 $('#tStop').addEventListener('click',()=>{ sfx('ui'); if(S.timer) stopTimer(); else if(S.asleep) wake(true); });
 
 /* ---- particles ---- */
@@ -1305,6 +1421,7 @@ function update(dt){
       if(Math.random()<dt*0.12) ignite();
       if(p.misT<=0) endMischief('ignored');
       break; }
+    case 'cowork': coworkTick(dt); break;
     case 'tidy': if(broom){ const bx=broomX()+4, near=Math.abs(bx-p.cxD)<12;
         setExpr('grumpy',0.3); p.lookUser=0; p.facing=bx<p.cxD?-1:1;          // glare at the broom
         p.grrT-=dt; if(p.grrT<=0){ p.grrT=rand(0.7,1.1); spawn({type:'dust',col:'#8a8480',x:p.cxD+rand(-3,3),y:p.sparkY,vx:rand(-6,6),vy:rand(-14,-8),life:0.9,s:2}); if(Math.random()<0.5) sfx('grr'); if(Math.random()<0.4) say('grr',1); }
@@ -1364,6 +1481,7 @@ function render(){
   R.lit(ctx,T,tintA,flick);
   // ---- pet & fx ----
   ({ember:drawEmber,candle:drawCandle,lantern:drawLantern})[R.pet](ctx,T);
+  drawCowork(ctx);
   if(ball){ const bx=Math.round(ball.x), by=Math.round(ball.y); ctx.globalCompositeOperation='lighter'; glow(bx,by-3,8,'rgba(255,180,60,.35)'); ctx.globalCompositeOperation='source-over'; drawMap(ctx,MAPS.spark,bx-3,by-7); }
   for(const b of bubbles){ ctx.fillStyle='rgba(191,234,255,.9)'; const n=b.r*6; for(let k=0;k<n;k++){ const an=k/n*Math.PI*2; ctx.fillRect(Math.round(b.x+Math.cos(an)*b.r),Math.round(b.y+Math.sin(an)*b.r),1,1); } ctx.fillStyle='#ffffff'; ctx.fillRect(Math.round(b.x-1),Math.round(b.y-1),1,1); }
   if(feather) drawMap(ctx,MAPS.feather,Math.round(feather.x),Math.round(feather.y)-8);
@@ -1380,7 +1498,7 @@ function glow(x,y,r,col){ const g=ctx.createRadialGradient(x,y,0,x,y,r); g.addCo
 function setRoom(id){
   if(!ROOMS[id]) id='hearth'; RID=id; R=ROOMS[id]; S.settings.room=id;
   pet.x=pet.tx=R.anchor.x; pet.cxD=R.anchor.x; pet.ang=0; pet.angV=0; pet.hop=0; pet.hv=0; food=ball=broom=null; bubbles=[]; feather=null; music=null; pet.toy=null; pet.onArrive=null;
-  aiming=false; blaze=false; $('#stage').classList.remove('blaze'); pet.state=S.asleep?'sleep':'idle'; parts.length=0; setTimeout(setPlayMode,0); outParts.length=0; cloudsKey=''; staticKey='';
+  aiming=false; blaze=false; $('#stage').classList.remove('blaze'); pet.state=S.asleep?'sleep':'idle'; if(S.timer&&S.timer.mode==='focus'&&S.timer.act&&S.timer.act!=='nap'&&!S.asleep){ pet.state='cowork'; pet.coT=0; pet.coBeat=0; } parts.length=0; setTimeout(setPlayMode,0); outParts.length=0; cloudsKey=''; staticKey='';
   render(); renderQuick(); updateHUD();
   if(typeof refreshTrains==='function'&&trainsShown()){ renderTrains(); refreshTrains(); }
 }
@@ -1415,6 +1533,7 @@ function tapScene(pt,wasPet){
   if(wasPet&&onPet(pt)){
     if(S.asleep){ if(S.timer&&S.timer.mode==='focus'){ say('zz',1.5); return toast(`Shh… ${Math.ceil((S.timer.end-Date.now())/60000)} min of focus left`); } wake(true); return; }
     if(pet.state==='play'||pet.state==='eat') return;
+    if(pet.state==='cowork'){ say('heart',1.4); hop(25); sfx('pet'); fx(EFFECTS.pet); return; }
     if(pet.sulk>0){ say('grr',1.2); pet.facing=pt.x<pet.cxD?1:-1; sfx('grr'); return; }   // still mad, turns away
     hop(70); pet.flare=1; burst(pet.cxD,pet.sparkY,8,'ember'); setExpr(Math.random()<0.5?'happy':'wow',1.4); pet.lookUser=2;
     say(['heart','note','bang','sparkle'][Math.floor(rand(0,4))],1.5); st().joy=clamp(st().joy+1,0,100); addFP(0.5); sfx('tap'); return;
@@ -1450,7 +1569,7 @@ function updateHUD(){
   $('#feedIco').src=$('#fuelIco').src=ico(R.foods[0]);
   $('#pName').textContent=S.name; $('#pMood').textContent=moodText();
   $('#fLv').textContent=Math.floor(S.fp/100);
-  const sb=$('#sleepBtn'); sb.querySelector('span').textContent=S.asleep?'Wake':'Sleep'; sb.querySelector('img').src=ico(S.asleep?'sun':'moon');
+  const sb=$('#sleepBtn'), inSess=S.timer&&S.timer.mode==='focus'; sb.querySelector('span').textContent=inSess?'Stop':(S.asleep?'Wake':'Focus'); sb.querySelector('img').src=ico(inSess?'bang':(S.asleep?'sun':'moon'));
   document.querySelectorAll('#bar .btn[data-act=feed],#bar .btn[data-act=play]').forEach(b=>b.classList.toggle('dim',S.asleep));
   $('#sndBtn').classList.toggle('off',!S.settings.sound);
   $('#trains').classList.toggle('hidden',!trainsShown());
@@ -1584,6 +1703,7 @@ if(CONFIG.trains.enabled){ renderTrains(); refreshTrains(); setInterval(refreshT
 function fit(){ const s=Math.min(innerWidth/800,innerHeight/480); $('#stage').style.transform=`scale(${s})`; }
 addEventListener('resize',fit); fit();
 setRoom(roomFromHash()||S.settings.room||'hearth');
+if(S.timer&&S.timer.mode==='focus'&&S.timer.act&&S.timer.act!=='nap'&&!S.asleep){ pet.state='cowork'; pet.coT=0; pet.coBeat=0; }
 scheduleMischief();
 setInterval(()=>{ updateHUD(); updateTimer(); },1000);
 updateTimer();
