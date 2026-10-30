@@ -157,6 +157,7 @@ img.ico{image-rendering:pixelated;display:block}
 #playBtn.spray{background:#cfeaff;box-shadow:inset 0 -6px 0 #8ec4ea,0 4px 0 var(--wood-dd);animation:pulse 0.8s steps(2) infinite}
 #playBtn.spray.armed{background:#7ab8f0;color:#fff;animation:none;box-shadow:inset 0 -6px 0 #4a8ad0,0 0 0 3px #fff,0 4px 0 var(--wood-dd)}
 #stage.aiming #scene{cursor:crosshair}
+#stage.blaze::after{content:'';position:absolute;left:0;top:0;width:800px;height:380px;pointer-events:none;box-shadow:inset 0 0 70px 24px rgba(255,70,20,.55);animation:pulse .6s steps(2) infinite;z-index:4}
 #dimmer{position:absolute;inset:0;background:rgba(0,0,8,.55);pointer-events:none;opacity:0;transition:opacity 1.5s;z-index:30}
 #dimmer.on{opacity:1}
 </style>
@@ -236,6 +237,7 @@ img.ico{image-rendering:pixelated;display:block}
       <div class="srow"><label>Name</label><input type="text" id="nameIn" maxlength="12"></div>
       <div class="srow"><label>Room</label><div class="seg" data-set="room"></div></div>
       <div class="srow"><label>Mischief</label><div class="seg" data-set="mischief"></div></div>
+      <div class="srow"><label>House fires</label><div class="seg" data-set="fires"></div></div>
       <div class="srow"><label>Season</label><div class="seg" data-set="season"></div></div>
       <div class="srow"><label>Time</label><div class="seg" data-set="time"></div></div>
       <div class="srow"><label>Weather</label><div class="seg" data-set="weather"></div></div>
@@ -397,7 +399,7 @@ function mk(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=
    ===================================================================== */
 const SAVE_KEY='ember-hearth-v1';
 function fresh(){ return { name:'Ember', stats:{fuel:80,joy:75,rest:90,tidy:85}, fp:120, asleep:false,
-  settings:{sound:true,mischief:'normal',room:'hearth',season:'auto',time:'live',weather:'auto',trains:'show'}, ents:null, last:Date.now() }; }
+  settings:{sound:true,fires:'on',mischief:'normal',room:'hearth',season:'auto',time:'live',weather:'auto',trains:'show'}, ents:null, last:Date.now() }; }
 let S;
 try{ S=JSON.parse(localStorage.getItem(SAVE_KEY)); }catch(e){}
 if(!S||!S.stats){ S=fresh(); }
@@ -516,7 +518,7 @@ function playSeq(seq){ if(!S.settings.sound||!seq) return;
   try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); if(AC.state==='suspended') AC.resume();
     let t=AC.currentTime+0.01; for(const [f,d,type] of seq){ const o=AC.createOscillator(), g=AC.createGain(); o.type=type||'square'; o.frequency.setValueAtTime(f,t);
       g.gain.setValueAtTime(0.035,t); g.gain.exponentialRampToValueAtTime(0.0001,t+d); o.connect(g).connect(AC.destination); o.start(t); o.stop(t+d+0.02); t+=d*0.85; } }catch(e){} }
-const SFX={sizzle:[[1800,.04,'sawtooth'],[1400,.06,'sawtooth'],[1000,.08,'sawtooth'],[700,.12,'sawtooth']],crackle:[[1300,.02],[400,.02],[1000,.02],[260,.03]],squirt:[[600,.03,'sine'],[900,.05,'sine']],sheepish:[[523,.1,'triangle'],[440,.1,'triangle'],[392,.18,'triangle']],chime:[[784,.12,'triangle'],[988,.12,'triangle'],[1175,.12,'triangle'],[1568,.3,'triangle']],grr:[[110,.09,'sawtooth'],[98,.09,'sawtooth'],[123,.12,'sawtooth']],pop:[[900,.04,'sine'],[1400,.06,'sine']],giggle:[[880,.05,'triangle'],[1046,.05,'triangle'],[880,.05,'triangle'],[1175,.07,'triangle']],tap:[[660,.07],[990,.09]],pet:[[523,.09,'triangle'],[659,.11,'triangle']],eat:[[180,.05,'sawtooth'],[140,.05,'sawtooth'],[220,.05,'sawtooth'],[160,.07,'sawtooth']],
+const SFX={alarm:[[2900,.14,'square'],[2900,.14,'square']],whoosh:[[180,.06,'sawtooth'],[260,.06,'sawtooth'],[380,.1,'sawtooth']],phew:[[659,.08,'triangle'],[784,.08,'triangle'],[1046,.16,'triangle']],sizzle:[[1800,.04,'sawtooth'],[1400,.06,'sawtooth'],[1000,.08,'sawtooth'],[700,.12,'sawtooth']],crackle:[[1300,.02],[400,.02],[1000,.02],[260,.03]],squirt:[[600,.03,'sine'],[900,.05,'sine']],sheepish:[[523,.1,'triangle'],[440,.1,'triangle'],[392,.18,'triangle']],chime:[[784,.12,'triangle'],[988,.12,'triangle'],[1175,.12,'triangle'],[1568,.3,'triangle']],grr:[[110,.09,'sawtooth'],[98,.09,'sawtooth'],[123,.12,'sawtooth']],pop:[[900,.04,'sine'],[1400,.06,'sine']],giggle:[[880,.05,'triangle'],[1046,.05,'triangle'],[880,.05,'triangle'],[1175,.07,'triangle']],tap:[[660,.07],[990,.09]],pet:[[523,.09,'triangle'],[659,.11,'triangle']],eat:[[180,.05,'sawtooth'],[140,.05,'sawtooth'],[220,.05,'sawtooth'],[160,.07,'sawtooth']],
   boop:[[300,.05],[520,.06]],on:[[440,.06],[660,.08]],off:[[660,.06],[440,.08]],tidy:[[880,.04,'sine'],[1175,.04,'sine'],[1320,.07,'sine']],
   sleep:[[392,.16,'triangle'],[330,.22,'triangle']],wake:[[330,.08],[392,.08],[523,.12]],no:[[200,.12],[160,.15]],ui:[[720,.04]],yay:[[523,.07],[659,.07],[784,.07],[1046,.12]]};
 
@@ -714,6 +716,7 @@ const ROOMS={
     props:{ lamp:[124,33,16,16], lantern:[145,14,11,15], candle:[49,10,9,11], curtains:[4,10,40,35] },
     dirt:{x0:HX0+1,x1:HX1-1,y:59,cols:['#8a8480','#a8a29c','#6a6460'],word:'sooty',clean:'The hearth is already spotless'},
     playBox:{x0:HX0+3,x1:HX1-4,top:HTOP+4,floor:57}, foods:['log','pinecone'],
+    burnables:[[56,68],[104,69],[24,51],[7,40],[41,40],[132,47],[80,72]],
     dyn(c){ curtains(c,5,43,11,43,!on2(RP('curtains')),30,'#b8433a','#8e2e28'); drawShade(c,false); c.fillStyle='#6a7080'; c.fillRect(148,20,5,6); },
     lit(c,t,tintA,flick){ const lamp=RP('lamp'),lan=RP('lantern'),cnd=RP('candle');
       c.globalCompositeOperation='lighter';
@@ -729,6 +732,7 @@ const ROOMS={
     props:{ lamp:[19,18,16,38], fan:[70,0,30,11], lights:[98,15,60,13], curtains:[33,9,40,33] },
     dirt:{x0:74,x1:95,y:45,cols:['#fffaf0','#f4ecd8','#e8dcc0'],word:'drippy',clean:'No wax drips to tidy'},
     playBox:{x0:70,x1:100,top:10,floor:45}, foods:['wax'],
+    burnables:[[64,66],[86,69],[114,43],[136,44],[37,41],[69,41],[60,63]],
     dyn(c,t){ curtains(c,35,71,10,41,!on2(RP('curtains')),27,'#d89a8a','#c07a6a');
       // ceiling fan
       const fanOn=on(RP('fan')); fanPhase+= fanOn?0.35:0; const L1=Math.round(Math.abs(Math.cos(fanPhase))*13)+1, L2=Math.round(Math.abs(Math.sin(fanPhase))*13)+1;
@@ -750,6 +754,7 @@ const ROOMS={
     props:{ door:[32,20,22,35], switch:[55,30,8,10], thermo:[78,18,8,17] },
     dirt:{x0:30,x1:80,y:57,cols:['#8a6a40','#b0402a','#6a5a40'],word:'dusty',clean:'The porch is already swept'},
     playBox:{x0:52,x1:86,top:8,floor:54}, foods:['oil'],
+    burnables:[[43,57],[78,47],[14,30],[40,62],[60,56],[25,56]],
     dyn(c){ const lock=Home.get(RP('door')); const locked=!lock||lock.state==='locked';
       c.fillStyle='#e0b050'; c.fillRect(48,37,3,3); c.fillStyle='#3a2210'; if(locked) c.fillRect(48,38,3,1); else c.fillRect(49,37,1,3);
       if(!locked){ c.fillStyle='#1e2a22'; c.fillRect(51,22,1,33); }
@@ -909,6 +914,7 @@ function tickle(){ const now=performance.now(); if(now-feather.lastT<260) return
   spawn({type:Math.random()<0.5?'heart':'note',x:pet.cxD+rand(-6,6),y:pet.bubY+4,vy:-16,life:1.1});
   if(R.pet==='lantern') pet.angV+=rand(-0.5,0.5); if(feather.count%3===0) hop(30); sfx('giggle'); }
 function actTidy(){
+  if(roomFires().length){ sfx('no'); return toast('Put the fire out first!'); }
   if(busy()) return toast(`${S.name} is busy`);
   if(st().tidy>=97) return toast(R.dirt.clean);
   if(S.timer&&S.timer.mode==='focus') return toast(`Let ${S.name} nap, ${Math.ceil((S.timer.end-Date.now())/60000)} min left`);
@@ -926,17 +932,52 @@ function startMischief(){
   pet.state='mischief'; pet.misT=25; pet.misAcc=0; pet.squirtsNeeded=Math.random()<0.4?2:1; pet.onArrive=null;
   setExpr('smug',30); say('imp',2.2); sfx('crackle');
   toast(`${S.name} is up to something!`); uiWakeUntil=Date.now()+60000; setPlayMode(); }
+/* ---- house fires (the "pick up the poop" chore) ----
+   Sparks from mischief light spots in the room. Fires grow, spread, smoke and make a mess
+   until you spray them out; scorch marks stay until you tidy. Saved, so they survive restarts. */
+S.fires=S.fires||[]; S.scorch=S.scorch||[];
+let blaze=false, alarmT=0, fireAcc=0;
+const roomFires=()=>S.fires.filter(f=>f.room===RID);
+function ignite(at){
+  if(S.settings.fires==='off') return;
+  const free=R.burnables.filter(([x,y])=>!roomFires().some(f=>f.x===x&&f.y===y)); if(!free.length) return;
+  const [x,y]=at||free[Math.floor(Math.random()*free.length)];
+  S.fires.push({room:RID,x,y,size:0.6}); sfx('whoosh'); burst(x,y-2,6,'ember');
+  if(roomFires().length===1) toast(`Uh oh, ${S.name} set something on fire!`);
+  setPlayMode(); }
+function douseFire(f){
+  f.size-=1.3; for(let i=0;i<6;i++) spawn({type:'steam',x:f.x+rand(-3,3),y:f.y-rand(1,5),vx:rand(-4,4),vy:rand(-12,-6),life:rand(.8,1.4)}); sfx('sizzle');
+  if(f.size<=0.3){ S.fires.splice(S.fires.indexOf(f),1); S.scorch.push({room:RID,x:f.x,y:f.y}); addFP(0.5);
+    if(!roomFires().length){ toast(`Fire's out. Phew!`); sfx('phew'); addFP(2); if(pet.state!=='mischief'){ aiming=false; } setPlayMode(); } } }
+function updateFires(dt){
+  const list=roomFires(); let total=0;
+  for(const f of list){ f.size=Math.min(3,f.size+dt*0.07); total+=f.size;
+    if(Math.random()<dt*(0.6+f.size)) spawn({type:'smoke',x:f.x+rand(-2,2),y:f.y-2-f.size*3,vx:rand(-3,3),vy:rand(-9,-5),life:rand(1.5,2.6)});
+    if(f.size>=2.5&&Math.random()<dt*0.04){ const near=R.burnables.filter(([x,y])=>!list.some(g=>g.x===x&&g.y===y)).sort((a,b)=>Math.hypot(a[0]-f.x,a[1]-f.y)-Math.hypot(b[0]-f.x,b[1]-f.y))[0]; if(near) ignite(near); } }
+  fireAcc+=dt; if(fireAcc>=1&&total>0){ fireAcc=0; fx({tidy:-0.35*total}); }
+  const wasBlaze=blaze; blaze=total>=8; $('#stage').classList.toggle('blaze',blaze);
+  if(blaze&&!wasBlaze){ toast('The house is on fire! Grab the spray bottle!'); addFP(-5); uiWakeUntil=Date.now()+120000; if(!S.asleep) setExpr('wow',3); }
+  if(blaze){ alarmT-=dt; if(alarmT<=0){ alarmT=1.3; sfx('alarm'); } }
+  return total; }
+function drawFires(c,t){
+  for(const f of roomFires()){ const w=Math.round(2+f.size*2), h=Math.round(3+f.size*3.2);
+    c.globalCompositeOperation='lighter'; glow(f.x,f.y-h/2,8+f.size*7,`rgba(255,120,40,${0.18+f.size*0.08})`); c.globalCompositeOperation='source-over';
+    for(let dx=-w;dx<=w;dx++){ const k=1-Math.abs(dx)/(w+1); const hc=Math.max(1,Math.round(h*k*(0.75+0.25*Math.sin(t*10+dx*1.9+f.x))));
+      for(let j=0;j<hc;j++){ const rr=j/hc; c.fillStyle=rr<0.35&&k>0.5?'#fff4b0':(rr<0.7?'#ffb23a':'#ff5a24'); c.fillRect(f.x+dx,f.y-1-j,1,1); } } } }
+function drawScorch(c){ c.fillStyle='rgba(30,16,10,.75)'; for(const m of S.scorch) if(m.room===RID) for(let i=0;i<9;i++){ c.fillRect(m.x-4+Math.floor(hash(i,m.x)*9),m.y-1+Math.floor(hash(i,m.y)*2),1,1); } }
 function endMischief(how){
   aiming=false; pet.state='idle'; pet.think=3;
   if(how==='squirted'){ setExpr('sad',2.5); pet.sulk=2.6; say('drop',2); sfx('sheepish'); toast(`${S.name} settles down. Sorry!`); scheduleMischief(1.5); }
   else { setExpr('smug',2); say('imp',1.6); toast(`${S.name} got away with it…`); addFP(-3); scheduleMischief(1); }
   setPlayMode(); }
-function setPlayMode(){ const b=$('#playBtn'); if(!b) return; const mis=pet.state==='mischief';
+function setPlayMode(){ const b=$('#playBtn'); if(!b) return; const mis=pet.state==='mischief'||roomFires().length>0; if(!mis) aiming=false;
   b.classList.toggle('spray',mis); b.classList.toggle('armed',mis&&aiming); $('#stage').classList.toggle('aiming',mis&&aiming);
   $('#playIco').src=ico(mis?'spray':'spark'); $('#playLbl').textContent=mis?(aiming?'Aim!':'Spray'):'Play'; }
 function squirtAt(pt){
   const sx=W-6, sy=H-4; sfx('squirt');
   for(let i=0;i<16;i++){ const tt=0.22+rand(-0.04,0.05); spawn({type:'water',x:sx+rand(-1,1),y:sy+rand(-1,1),vx:(pt.x-sx)/tt+rand(-6,6),vy:(pt.y-sy)/tt-30+rand(-6,6),g:120,life:tt+0.05,age:-i*0.012}); }
+  const fire=roomFires().map(f=>[f,Math.hypot(pt.x-f.x,pt.y-(f.y-2-f.size*2))]).filter(([f,d])=>d<5+f.size*2.5).sort((a,b)=>a[1]-b[1])[0];
+  if(fire){ setTimeout(()=>douseFire(fire[0]),230); return; }
   const hit=onPet(pt)||Math.hypot(pt.x-pet.cxD,pt.y-pet.glowY)<14;
   setTimeout(()=>{ if(hit) douse(); else for(let i=0;i<6;i++) spawn({type:'water',x:pt.x,y:pt.y,vx:rand(-20,20),vy:rand(-30,-10),g:150,life:0.4}); },230); }
 function douse(){
@@ -1016,6 +1057,7 @@ function drawPart(c,p){ const a=clamp(1-(p.age/p.life)**2,0,1); c.globalAlpha=a;
     case 'ember': c.fillStyle=p.cool?(p.age<p.life*0.5?'#ff5a24':'#a02a14'):p.age<p.life*0.4?'#fff2a0':(p.age<p.life*0.7?'#ffb23a':'#ff5a24'); c.fillRect(x,y,1,1); break;
     case 'dust': c.fillStyle=p.col||'#b8b0a4'; c.fillRect(x,y,p.s||1,p.s||1); break;
     case 'water': if(p.age<0) break; c.fillStyle=p.age<p.life*0.5?'#a8e0ff':'#5aa8ff'; c.fillRect(x,y,1,1); break;
+    case 'smoke': { const sz=1+Math.floor(p.age*1.8); c.globalAlpha=a*0.55; c.fillStyle='#4a4246'; c.fillRect(x,y,sz,sz); break; }
     case 'steam': { const sz=1+Math.floor(p.age*2.5); c.globalAlpha=a*0.7; c.fillStyle='#e8eef4'; c.fillRect(x,y,sz,sz); break; }
     case 'ring': { const r=Math.round(1+p.age*8); c.fillStyle='#fff6cf'; for(let k=0;k<8;k++){ const an=k/8*Math.PI*2; c.fillRect(Math.round(x+Math.cos(an)*r),Math.round(y+Math.sin(an)*r*0.6),1,1);} break; }
     case 'snow': c.fillStyle='#ffffff'; c.fillRect(x,y,1,1); break;
@@ -1187,6 +1229,7 @@ function update(dt){
   p.lookUser=Math.max(0,p.lookUser-dt);
   if(p.douse>0) p.douse=Math.max(0,p.douse-dt*0.45);
   if(canMisbehave()&&Date.now()>=nextMischief) startMischief();
+  updateFires(dt);
   if(p.sulk>0){ p.sulk-=dt; if(p.sulk>1) p.lookUser=0; if(p.sulk<=0){ say('sparkle',1.6); setExpr('happy',1.5); hop(35); } }
 
   switch(p.state){
@@ -1245,6 +1288,7 @@ function update(dt){
         if(p.state==='mischief'&&Math.random()<dt*1.2){ p.tx=clamp(p.x+rand(-14,14),R.range[0],R.range[1]); hop(45); } const d=p.tx-p.x; if(Math.abs(d)>0.6){ p.facing=Math.sign(d); p.x+=Math.sign(d)*Math.min(Math.abs(d),34*dt); p.walkT+=dt; } }
       else if(R.pet==='candle'){ p.sx=1+Math.sin(T*30)*0.1; if(Math.random()<dt*6) spawn({type:'dust',col:'#fffaf0',x:p.cxD+rand(-6,6),y:p.eatY+4,vx:rand(-12,12),vy:rand(-14,-4),g:120,life:0.8,s:1}); if(Math.random()<dt*2) hop(30); }
       else { p.angV+=Math.sin(T*3)*dt*6; if(Math.random()<dt*8) spawn({type:'ember',x:p.cxD,y:p.glowY,vx:rand(-30,30),vy:rand(-30,-10),g:80,life:0.9}); }
+      if(Math.random()<dt*0.12) ignite();
       if(p.misT<=0) endMischief('ignored');
       break; }
     case 'tidy': if(broom){ const bx=broomX()+4, near=Math.abs(bx-p.cxD)<12;
@@ -1259,7 +1303,7 @@ function update(dt){
   }
   if(food&&!food.landed){ food.vy+=200*dt; food.y+=food.vy*dt; const ly=mobile()?R.anchor.y:p.eatY; if(food.y>=ly){ food.y=ly; food.landed=true; burst(food.x,ly,5,'ember'); } if(!mobile()) food.x=p.cxD; }
   if(broom){ broom.t+=dt; const D=R.dirt; if(Math.random()<dt*25) spawn({type:'dust',col:D.cols[1],x:broomX()+rand(-2,4),y:D.y-rand(0,3),vx:rand(-8,8),vy:rand(-10,-3),g:10,life:rand(.4,.8),s:Math.random()<0.3?2:1});
-    if(broom.t>=2.4){ broom=null; const was=s.tidy; fx(EFFECTS.tidy); if(was<70) addFP(5); for(let i=0;i<6;i++) spawn({type:'sparkle',x:rand(D.x0,D.x1),y:D.y-rand(2,12),life:0.8}); p.state='idle'; p.think=4; p.facing=-p.facing; p.lookUser=0; say('grr',1.5); setExpr('grumpy',2.6); p.sulk=2.6; sfx('tidy'); } }
+    if(broom.t>=2.4){ broom=null; S.scorch=S.scorch.filter(m=>m.room!==RID); const was=s.tidy; fx(EFFECTS.tidy); if(was<70) addFP(5); for(let i=0;i<6;i++) spawn({type:'sparkle',x:rand(D.x0,D.x1),y:D.y-rand(2,12),life:0.8}); p.state='idle'; p.think=4; p.facing=-p.facing; p.lookUser=0; say('grr',1.5); setExpr('grumpy',2.6); p.sulk=2.6; sfx('tidy'); } }
   for(const cl of clouds){ cl.x+=cl.v*dt; if(cl.x>R.win.x+R.win.w+2) cl.x=R.win.x-cl.img.width-2; }
   updParts(parts,dt); updParts(outParts,dt,R.win.y+R.win.h+1);
 }
@@ -1280,6 +1324,7 @@ function render(){
   wctx.drawImage(staticLayer,0,0);
   const D=R.dirt, n=Math.round((100-st().tidy)*0.5);
   for(let i=0;i<n;i++){ wctx.fillStyle=D.cols[i%3]; wctx.fillRect(D.x0+Math.floor(hash(i,3)*(D.x1-D.x0)),D.y-(hash(i,5)<0.35?1:0),1,1); }
+  drawScorch(wctx);
   R.dyn(wctx,T);
   if(food){ const m=MAPS[food.kind]; const sc=1-(food.eaten||0); if(sc>0.05){ const w=Math.max(1,Math.round(m.w*sc)); wctx.save(); wctx.translate(food.x-w/2,food.y-m.h); wctx.scale(w/m.w,1); drawMap(wctx,m,0,0); wctx.restore(); } }
   if(broom) drawMap(wctx,MAPS.broom,Math.round(broomX()),D.y-8);
@@ -1305,7 +1350,9 @@ function render(){
   if(ball){ const bx=Math.round(ball.x), by=Math.round(ball.y); ctx.globalCompositeOperation='lighter'; glow(bx,by-3,8,'rgba(255,180,60,.35)'); ctx.globalCompositeOperation='source-over'; drawMap(ctx,MAPS.spark,bx-3,by-7); }
   for(const b of bubbles){ ctx.fillStyle='rgba(191,234,255,.9)'; const n=b.r*6; for(let k=0;k<n;k++){ const an=k/n*Math.PI*2; ctx.fillRect(Math.round(b.x+Math.cos(an)*b.r),Math.round(b.y+Math.sin(an)*b.r),1,1); } ctx.fillStyle='#ffffff'; ctx.fillRect(Math.round(b.x-1),Math.round(b.y-1),1,1); }
   if(feather) drawMap(ctx,MAPS.feather,Math.round(feather.x),Math.round(feather.y)-8);
+  drawFires(ctx,T);
   for(const p of parts) drawPart(ctx,p);
+  { const tot=roomFires().reduce((a,f)=>a+f.size,0); if(tot>0){ ctx.fillStyle=`rgba(70,58,58,${Math.min(0.45,tot*0.04)})`; ctx.fillRect(0,0,W,H); } }   // smoke haze
   drawBubble(ctx);
 }
 function glow(x,y,r,col){ const g=ctx.createRadialGradient(x,y,0,x,y,r); g.addColorStop(0,col); g.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.fillRect(x-r,y-r,r*2,r*2); }
@@ -1316,7 +1363,7 @@ function glow(x,y,r,col){ const g=ctx.createRadialGradient(x,y,0,x,y,r); g.addCo
 function setRoom(id){
   if(!ROOMS[id]) id='hearth'; RID=id; R=ROOMS[id]; S.settings.room=id;
   pet.x=pet.tx=R.anchor.x; pet.cxD=R.anchor.x; pet.ang=0; pet.angV=0; pet.hop=0; pet.hv=0; food=ball=broom=null; bubbles=[]; feather=null; music=null; pet.toy=null; pet.onArrive=null;
-  aiming=false; pet.state=S.asleep?'sleep':'idle'; parts.length=0; setTimeout(setPlayMode,0); outParts.length=0; cloudsKey=''; staticKey='';
+  aiming=false; blaze=false; $('#stage').classList.remove('blaze'); pet.state=S.asleep?'sleep':'idle'; parts.length=0; setTimeout(setPlayMode,0); outParts.length=0; cloudsKey=''; staticKey='';
   render(); renderQuick(); updateHUD();
   if(typeof refreshTrains==='function'&&trainsShown()){ renderTrains(); refreshTrains(); }
 }
@@ -1345,7 +1392,7 @@ function strokePet(pt){
 function inRect(pt,[x,y,w,h]){ return pt.x>=x&&pt.x<x+w&&pt.y>=y&&pt.y<y+h; }
 function tapScene(pt,wasPet){
   lastInteract=Date.now();
-  if(aiming&&pet.state==='mischief'){ squirtAt(pt); return; }
+  if(aiming&&(pet.state==='mischief'||roomFires().length)){ squirtAt(pt); return; }
   if(pet.state==='mischief'&&wasPet&&onPet(pt)){ say('imp',1); return; }
   if(wasPet&&onPet(pt)){
     if(S.asleep){ if(S.timer&&S.timer.mode==='focus'){ say('zz',1.5); return toast(`Shh… ${Math.ceil((S.timer.end-Date.now())/60000)} min of focus left`); } wake(true); return; }
@@ -1395,7 +1442,7 @@ function renderQuick(){ $('#quick').innerHTML=CONFIG.rooms[RID].quick.map(id=>{ 
 $('#quick').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(b) toggleEntity(b.dataset.id); });
 
 document.querySelectorAll('#bar .btn[data-act]').forEach(b=>b.addEventListener('click',()=>{ lastInteract=Date.now();
-  ({feed:actFeed,play:()=>{ if(pet.state==='mischief'){ aiming=!aiming; setPlayMode(); if(aiming) toast(`Tap ${S.name} to squirt!`); sfx('ui'); return; } actPlay(); },tidy:actTidy,sleep:actSleep,home:openHome})[b.dataset.act](); updateHUD(); }));
+  ({feed:actFeed,play:()=>{ if(pet.state==='mischief'||roomFires().length){ aiming=!aiming; setPlayMode(); if(aiming) toast(`Tap ${S.name} to squirt!`); sfx('ui'); return; } actPlay(); },tidy:actTidy,sleep:actSleep,home:openHome})[b.dataset.act](); updateHUD(); }));
 $('#sndBtn').addEventListener('click',()=>{ S.settings.sound=!S.settings.sound; sfx('ui'); updateHUD(); save(); });
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{ $('#'+b.dataset.close).classList.add('hidden'); sfx('ui'); save(); }));
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o){ o.classList.add('hidden'); save(); } }));
@@ -1437,7 +1484,7 @@ Home.on((id,prev,e)=>{
 });
 
 /* ---- settings ---- */
-const SETS={mischief:['off','rare','normal','often'],room:['hearth','bedroom','porch'],trains:['show','hide'],season:['auto','spring','summer','fall','winter'],time:['live','morning','noon','dusk','night'],weather:['auto','clear','cloudy','rain','snow']};
+const SETS={fires:['on','off'],mischief:['off','rare','normal','often'],room:['hearth','bedroom','porch'],trains:['show','hide'],season:['auto','spring','summer','fall','winter'],time:['live','morning','noon','dusk','night'],weather:['auto','clear','cloudy','rain','snow']};
 function renderSettings(){ $('#nameIn').value=S.name;
   document.querySelectorAll('.seg[data-set]').forEach(sg=>{ const k=sg.dataset.set; sg.innerHTML=SETS[k].map(v=>`<button class="${S.settings[k]===v?'sel':''}" data-v="${v}">${v[0].toUpperCase()+v.slice(1)}</button>`).join(''); }); }
 $('#gearBtn').addEventListener('click',()=>{ renderSettings(); $('#settings').classList.remove('hidden'); sfx('ui'); });
