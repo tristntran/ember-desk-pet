@@ -927,6 +927,7 @@ function cantPlay(scale=1){ const P=CONFIG.play, s=st();
 function quitPlay(why){ ball=null; bubbles=[]; feather=null; music=null; pet.toy=null; pet.state='idle'; pet.think=3; setExpr('sad',2.5); say(why.icon,2.2); sfx('no');
   toast(why.msg.replace('to play','to keep playing')); }
 function startToy(id){
+  relay('play',{toy:id});
   { const why=cantPlay(); if(why){ toast(why.msg); return; } }
   if(S.asleep||busy()) return;
   const B=R.playBox; pet.state='play'; pet.toy=id; pet.kicks=0; pet.actT=25; lastInteract=Date.now();
@@ -980,7 +981,7 @@ let aiming=false, nextMischief=0;
 function scheduleMischief(mult=1){ const m=MISCHIEF_MIN[S.settings.mischief]; if(!m){ nextMischief=Infinity; return; }
   let mins=rand(m[0],m[1])*mult; if(st().joy<40) mins*=0.5;           // bored pets act out sooner
   nextMischief=Date.now()+mins*60000; }
-function canMisbehave(){ return S.settings.mischief!=='off'&&!S.asleep&&pet.state==='idle'&&!(S.timer&&S.timer.mode==='focus')&&!pet.sulk; }
+function canMisbehave(){ return !isFollower()&&S.settings.mischief!=='off'&&!S.asleep&&pet.state==='idle'&&!(S.timer&&S.timer.mode==='focus')&&!pet.sulk; }
 function startMischief(){
   pet.state='mischief'; pet.misT=25; pet.misAcc=0; pet.squirtsNeeded=Math.random()<0.4?2:1; pet.onArrive=null;
   setExpr('smug',30); say('imp',2.2); sfx('crackle');
@@ -992,7 +993,7 @@ S.fires=S.fires||[]; S.scorch=S.scorch||[];
 let blaze=false, alarmT=0, fireAcc=0;
 const roomFires=()=>S.fires.filter(f=>f.room===RID);
 function ignite(at){
-  if(S.settings.fires==='off') return;
+  if(S.settings.fires==='off'||isFollower()) return;
   const free=R.burnables.filter(([x,y])=>!roomFires().some(f=>f.x===x&&f.y===y)); if(!free.length) return;
   const [x,y]=at||free[Math.floor(Math.random()*free.length)];
   S.fires.push({room:RID,x,y,size:0.6}); sfx('whoosh'); burst(x,y-2,6,'ember');
@@ -1030,10 +1031,11 @@ function squirtAt(pt){
   const sx=W-6, sy=H-4; sfx('squirt');
   for(let i=0;i<16;i++){ const tt=0.22+rand(-0.04,0.05); spawn({type:'water',x:sx+rand(-1,1),y:sy+rand(-1,1),vx:(pt.x-sx)/tt+rand(-6,6),vy:(pt.y-sy)/tt-30+rand(-6,6),g:120,life:tt+0.05,age:-i*0.012}); }
   const fire=roomFires().map(f=>[f,Math.hypot(pt.x-f.x,pt.y-(f.y-2-f.size*2))]).filter(([f,d])=>d<5+f.size*2.5).sort((a,b)=>a[1]-b[1])[0];
-  if(fire){ setTimeout(()=>douseFire(fire[0]),230); return; }
+  if(fire){ relay('spray'); setTimeout(()=>douseFire(fire[0]),230); return; }
   const hit=onPet(pt)||Math.hypot(pt.x-pet.cxD,pt.y-pet.glowY)<14;
   setTimeout(()=>{ if(hit) douse(); else for(let i=0;i<6;i++) spawn({type:'water',x:pt.x,y:pt.y,vx:rand(-20,20),vy:rand(-30,-10),g:150,life:0.4}); },230); }
 function douse(){
+  relay('spray');
   sfx('sizzle'); pet.douse=1; pet.flare=0; hop(25); setExpr('wow',0.9);
   for(let i=0;i<10;i++) spawn({type:'steam',x:pet.cxD+rand(-6,6),y:pet.sparkY+rand(-2,6),vx:rand(-5,5),vy:rand(-14,-6),life:rand(1,1.8)});
   fx(EFFECTS.squirt);
@@ -1093,6 +1095,7 @@ function stopTimer(){ const t=S.timer; if(!t) return; S.timer=null;
   else toast('Break ended'); updateTimer(); updateHUD(); save(); }
 function alarm(){ sfx('chime'); setTimeout(()=>sfx('chime'),900); setTimeout(()=>sfx('chime'),1800); }
 function timerDone(){
+  if(isFollower()) return;   // the screen running Ember handles it
   const t=S.timer; S.timer=null; alarm(); uiWakeUntil=Date.now()+60000;
   if(t.mode==='focus'){
     addFP(5); fx({joy:+6}); runHA(CONFIG.focus.onEnd);
@@ -1341,7 +1344,7 @@ function drawBubble(c){ const b=pet.bubble; if(!b) return; const m=MAPS[b.icon];
    ===================================================================== */
 let T=0;
 function update(dt){
-  if(S.timer&&Date.now()>=S.timer.end) timerDone();
+  if(S.timer&&Date.now()>=S.timer.end&&!isFollower()) timerDone();
   const s=st(), p=pet, m=dt/60;
   if(S.asleep){ s.rest+=4*m; s.fuel-=0.3*m; }
   else { s.fuel-=0.7*m; s.joy-=0.9*(1+(s.fuel<20?1:0)+(s.tidy<20?0.5:0))*m; s.rest-=(s.fuel<20?0.8:0.45)*m; }  // hungry → grumpier & more tired; messy → grumpier
@@ -1522,7 +1525,7 @@ function strokePet(pt){
   spawn({type:'heart',x:pet.cxD+rand(-6,6),y:pet.bubY+4,vy:-16,life:1.2});
   if(R.pet==='lantern') pet.angV+=(pt.x<pet.cxD?1:-1)*0.15;
   const now=performance.now();
-  if(now-pet.lastPetGain>450){ pet.lastPetGain=now; fx(EFFECTS.pet); addFP(1); sfx('pet'); }
+  if(now-pet.lastPetGain>450){ pet.lastPetGain=now; if(now-(pet.lastRelay||0)>3000){ pet.lastRelay=now; relay('pet'); } fx(EFFECTS.pet); addFP(1); sfx('pet'); }
   if(!S.asleep){ if(pet.state==='idle'||pet.state==='walk'){ pet.state='idle'; pet.think=1.5; pet.onArrive=null; } setExpr('happy',1.2); pet.lookUser=1.5; pet.flare=Math.min(1,pet.flare+0.15); }
 }
 function inRect(pt,[x,y,w,h]){ return pt.x>=x&&pt.x<x+w&&pt.y>=y&&pt.y<y+h; }
@@ -1552,7 +1555,7 @@ function tapScene(pt,wasPet){
    HUD / UI
    ===================================================================== */
 let toastT=null;
-function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2300); }
+function toast(msg){ if(NET.capture) NET.capture.push(msg); const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2300); }
 function moodText(){ if(S.asleep) return 'sleeping'; if(pet.expr==='grumpy') return 'grumpy'; if(pet.state==='mischief') return 'mischievous'; const l=lowestNeed(); if(l.v<20) return {fuel:'hungry',joy:'bored',rest:'sleepy',tidy:R.dirt.word}[l.k];
   const s=st(); const avg=(s.fuel+s.joy+s.rest+s.tidy)/4; return avg>82?'glowing':avg>62?'cheerful':avg>42?'content':'grumpy'; }
 function setBar(el,v){ el.style.width=v+'%'; el.className=v<25?'bad':v<50?'mid':''; }
@@ -1580,7 +1583,7 @@ function renderQuick(){ $('#quick').innerHTML=CONFIG.rooms[RID].quick.map(id=>{ 
 $('#quick').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(b) toggleEntity(b.dataset.id); });
 
 document.querySelectorAll('#bar .btn[data-act]').forEach(b=>b.addEventListener('click',()=>{ lastInteract=Date.now();
-  ({feed:actFeed,play:()=>{ if(pet.state==='mischief'||roomFires().length){ aiming=!aiming; setPlayMode(); if(aiming) toast(`Tap ${S.name} to squirt!`); sfx('ui'); return; } actPlay(); },tidy:actTidy,sleep:actSleep,home:openHome})[b.dataset.act](); updateHUD(); }));
+  ({feed:()=>{ relay('feed'); actFeed(); },play:()=>{ if(pet.state==='mischief'||roomFires().length){ aiming=!aiming; setPlayMode(); if(aiming) toast(`Tap ${S.name} to squirt!`); sfx('ui'); return; } actPlay(); },tidy:()=>{ relay('tidy'); actTidy(); },sleep:()=>{ if(isFollower()&&!S.asleep&&!S.timer) return toast('Start sessions on the main screen'); if(isFollower()&&S.asleep) relay('wake'); actSleep(); },home:openHome})[b.dataset.act](); updateHUD(); }));
 $('#sndBtn').addEventListener('click',()=>{ S.settings.sound=!S.settings.sound; sfx('ui'); updateHUD(); save(); });
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{ $('#'+b.dataset.close).classList.add('hidden'); sfx('ui'); save(); }));
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o){ o.classList.add('hidden'); save(); } }));
@@ -1698,6 +1701,90 @@ $('#trains').addEventListener('click',()=>{ $('#trSt').textContent='refreshing�
 if(CONFIG.trains.enabled){ renderTrains(); refreshTrains(); setInterval(refreshTrains,CONFIG.trains.refreshSec*1000); setInterval(renderTrains,5000); }
 
 /* =====================================================================
+   NETWORK — when served by ember_server.py the Pi keeps Ember's state and
+   other people on the LAN can interact through the API (see API.md).
+   One screen holds the "lease" and runs Ember; other screens mirror it.
+   Opened from a file or the preview link, this all stays off.
+   ===================================================================== */
+const NET={on:false,leader:false,id:Math.random().toString(36).slice(2,10),capture:null,lastPush:0,lastPull:0,busy:false,remote:null};
+const SHARED=['name','stats','fp','asleep','fires','scorch','log','timer','sessions','lastTidy','lastNap','lastAct'];
+const VERB={feed:'fed',play:'is playing with',pet:'petted',tidy:'is tidying up after',sleep:'tucked in',wake:'woke up',spray:'sprayed',mischief:'egged on'};
+async function api(path,body){ const r=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'}); return r.json(); }
+const isFollower=()=>NET.on&&!NET.leader;
+function netSummary(){ const s=st();
+  return { pet:{ name:S.name, mood:moodText(), friendship:Math.floor(S.fp/100), stats:Object.fromEntries(Object.entries(s).map(([k,v])=>[k,Math.round(v)])),
+      asleep:S.asleep, activity:pet.state, toy:pet.toy||null, room:RID, misbehaving:pet.state==='mischief',
+      fires:S.fires.length, session:S.timer?{mode:S.timer.mode,activity:S.timer.act||null,ends:S.timer.end}:null, favoriteToy:favToy() },
+    devices:Object.values(Home.ents).filter(e=>e.room).map(e=>({entity_id:e.entity_id,name:e.attributes.friendly_name,room:e.room,state:e.state,attributes:e.attributes})) }; }
+function adopt(full,activity){ if(!full) return;
+  for(const k of SHARED) if(k in full) S[k]=full[k];
+  if(S.asleep&&pet.state!=='sleep'){ pet.state='sleep'; }
+  else if(!S.asleep&&pet.state==='sleep'){ pet.state='idle'; pet.think=1; }
+  if(activity==='mischief'&&pet.state==='idle'){ pet.state='mischief'; pet.misT=1e9; setExpr('smug',30); setPlayMode(); }
+  if(activity!=='mischief'&&pet.state==='mischief'){ pet.state='idle'; setExpr(null,0); setPlayMode(); }
+  if(S.timer&&S.timer.mode==='focus'&&S.timer.act&&S.timer.act!=='nap'&&!S.asleep&&pet.state==='idle'){ pet.state='cowork'; pet.coT=0; pet.coBeat=0; }
+  if(!(S.timer&&S.timer.mode==='focus')&&pet.state==='cowork') pet.state='idle';
+  updateHUD(); updateTimer(); setPlayMode(); }
+async function runAction(a){
+  const act=a.action, who=a.by||'Someone', cap=[]; NET.capture=cap; let ok=true;
+  try{
+    if(act.type==='pet'){ const before=S.asleep; switch(act.action){
+      case 'feed': actFeed(); ok=!!food; break;
+      case 'play': if(pet.state==='mischief'){ cap.push(`${S.name} is misbehaving. Spray it instead`); ok=false; break; }
+        { const why=cantPlay(); if(why){ cap.push(why.msg); ok=false; break; } } if(busy()||S.asleep){ cap.push(`${S.name} is busy`); ok=false; break; }
+        startToy(act.toy&&TOYS.find(t=>t.id===act.toy)?act.toy:'ball'); ok=pet.state==='play'; break;
+      case 'pet': for(let i=0;i<3;i++) spawn({type:'heart',x:pet.cxD+rand(-6,6),y:pet.bubY+4,vy:-16,life:1.2}); if(!S.asleep&&pet.sulk<=0){ fx(EFFECTS.pet); addFP(1); hop(30); setExpr('happy',1.2); } sfx('pet'); break;
+      case 'tidy': actTidy(); ok=!!broom; break;
+      case 'sleep': if(!S.asleep){ if(busy()){ cap.push(`${S.name} is busy`); ok=false; } else goSleep(); } break;
+      case 'wake': if(S.timer&&S.timer.mode==='focus'){ cap.push(`${S.name} is in a focus session`); ok=false; } else wake(true); break;
+      case 'spray': { const f=roomFires().sort((x,y)=>y.size-x.size)[0];
+        if(f) squirtAt({x:f.x,y:f.y-2-f.size*2}); else if(pet.state==='mischief') squirtAt({x:pet.cxD,y:pet.glowY}); else { cap.push('Nothing to spray'); ok=false; } break; }
+      case 'mischief': if(S.settings.mischief==='off'){ cap.push('Mischief is turned off'); ok=false; } else if(canMisbehave()) startMischief(); else { cap.push(`${S.name} is busy`); ok=false; } break;
+    }
+      if(ok) setTimeout(()=>toast(`${who} ${VERB[act.action]} ${S.name}`),act.action==='mischief'?1800:60);
+    } else if(act.type==='device'){
+      const e=Home.get(act.entity_id), d=act.entity_id.split('.')[0], id=act.entity_id, data=act.data||{};
+      if(!e){ ok=false; cap.push('Unknown device'); }
+      else switch(act.service){
+        case 'toggle': toggleEntity(id); break;
+        case 'turn_on': await Home.call(d,'turn_on',{entity_id:id,...(d==='light'&&data.brightness_pct?{brightness_pct:+data.brightness_pct}:{})}); break;
+        case 'turn_off': await Home.call(d,'turn_off',{entity_id:id}); break;
+        case 'lock': case 'unlock': await Home.call('lock',act.service,{entity_id:id}); break;
+        case 'open': await Home.call('cover','open_cover',{entity_id:id}); break;
+        case 'close': await Home.call('cover','close_cover',{entity_id:id}); break;
+        case 'set_temperature': if(data.temperature==null){ ok=false; cap.push('temperature is required'); } else await Home.call('climate','set_temperature',{entity_id:id,temperature:+data.temperature}); break;
+        default: ok=false; cap.push('Unsupported service');
+      }
+      if(ok) setTimeout(()=>toast(`${who}: ${e.attributes.friendly_name} → ${stateText(Home.get(id))}`),120);
+    }
+  }catch(err){ ok=false; cap.push(String(err&&err.message||err)); }
+  NET.capture=null;
+  try{ await api(`/api/actions/${a.id}/done`,{result:{ok,msg:cap.join(' ')||'ok'}}); }catch(e){}
+  NET.lastPush=0;   // push fresh state right away
+}
+async function netTick(){
+  if(NET.busy) return; NET.busy=true;
+  try{
+    const L=await api('/api/lease',{id:NET.id,room:RID}); const was=NET.leader; NET.leader=!!L.you;
+    if(NET.leader&&!was) toast(`${S.name} lives on this screen now`);
+    if(NET.leader){
+      for(const a of await api(`/api/queue/next?id=${NET.id}`)) await runAction(a);
+      if(Date.now()-NET.lastPush>2500){ NET.lastPush=Date.now(); S.last=Date.now(); await api('/api/state',{id:NET.id,full:S,summary:netSummary()}); }
+    } else if(Date.now()-NET.lastPull>2500){ NET.lastPull=Date.now(); const r=await api('/api/state?full=1'); adopt(r.full,r.pet&&r.pet.activity); }
+  }catch(e){}
+  NET.busy=false;
+}
+// mirror screens send what you do here to the screen running Ember (the animation still plays locally)
+function relay(action,extra){ if(isFollower()) api(`/api/pet/${action}`,{by:`${S.name}'s ${R.label.toLowerCase()} screen`,...(extra||{})}).catch(()=>{}); }
+async function netInit(){
+  if(!location.protocol.startsWith('http')) return;
+  try{ const r=await fetch('/api/ping',{cache:'no-store'}); if(!r.ok) return; await r.json(); }catch(e){ return; }
+  NET.on=true;
+  try{ const r=await api('/api/state?full=1'); if(r.full&&(r.full.last||0)>(S.last||0)) adopt(r.full,r.pet&&r.pet.activity); }catch(e){}
+  setInterval(netTick,1500); netTick();
+}
+
+/* =====================================================================
    BOOT
    ===================================================================== */
 function fit(){ const s=Math.min(innerWidth/800,innerHeight/480); $('#stage').style.transform=`scale(${s})`; }
@@ -1705,6 +1792,7 @@ addEventListener('resize',fit); fit();
 setRoom(roomFromHash()||S.settings.room||'hearth');
 if(S.timer&&S.timer.mode==='focus'&&S.timer.act&&S.timer.act!=='nap'&&!S.asleep){ pet.state='cowork'; pet.coT=0; pet.coBeat=0; }
 scheduleMischief();
+netInit();
 setInterval(()=>{ updateHUD(); updateTimer(); },1000);
 updateTimer();
 setInterval(save,10000);

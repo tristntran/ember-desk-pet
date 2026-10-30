@@ -1,3 +1,5 @@
 config.local.js
 .DS_Store
 __pycache__/
+ember_state.json
+ember_state.json.tmp

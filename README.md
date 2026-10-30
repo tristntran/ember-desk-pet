@@ -5,9 +5,12 @@ Ember is a little fire spirit that lives in your house, controls your Home Assis
 
 ## Run it
 ```bash
-python3 ember_server.py          # serves the page + relays MTA subway feeds
+python3 ember_server.py          # serves the screens, stores Ember's state, relays MTA feeds, LAN API
 chromium-browser --kiosk http://localhost:8080/#hearth     # or #bedroom, #porch
 ```
+- Other screens on the network: `http://<pi>:8080/#bedroom`. They mirror the Ember on the main screen.
+- Phone remote for anyone on your network: `http://<pi>:8080/remote`
+- API for scripts and other apps: see [API.md](API.md). Locks are off by default.
 
 ## Rooms
 | Hash | Ember is… | Tappable props |

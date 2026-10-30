@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ember remote</title>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#3a2210;--wood:#b5733a;--wood-dd:#5c3214;--parch:#f7e3b0;--parch-l:#fff2cf;--parch-d:#e2c287;--ok:#5fae3e;--mid:#e8a92a;--bad:#d9573b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:#2a1a0e;font-family:'Pixelify Sans',ui-monospace,monospace;color:var(--ink);padding:14px;max-width:520px;margin:0 auto}
+.card{background:var(--parch);border:3px solid var(--ink);box-shadow:inset 0 0 0 3px var(--wood),inset 0 -8px 0 var(--parch-d);padding:14px 16px 18px;margin-bottom:12px}
+h1{margin:0;font-size:26px;display:flex;justify-content:space-between;align-items:baseline}
+h1 small{font-size:15px;font-weight:400;opacity:.75}
+h2{margin:0 0 8px;font-size:18px}
+.sub{font-size:14px;opacity:.75;margin-top:2px}
+.bars{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-top:10px}
+.bar{font-size:14px}.bar div{height:12px;background:#5a3a22;border:2px solid var(--ink);margin-top:2px}.bar i{display:block;height:100%;background:var(--ok)}
+.bar i.mid{background:var(--mid)}.bar i.bad{background:var(--bad)}
+.btns{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+button{font-family:inherit;font-size:16px;font-weight:600;color:var(--ink);background:var(--parch-l);border:3px solid var(--ink);box-shadow:inset 0 -5px 0 var(--parch-d);padding:12px 4px 15px;cursor:pointer}
+button:active{transform:translateY(2px)}
+button.hot{background:#cfeaff;box-shadow:inset 0 -5px 0 #8ec4ea}
+button.on{background:#ffe89a;box-shadow:inset 0 -5px 0 #f0c45a}
+button:disabled{opacity:.45}
+.toys{display:none;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}.toys.show{display:grid}
+.dev{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:2px dashed var(--parch-d)}
+.dev:first-of-type{border-top:0}.dev span{flex:1;font-size:16px}.dev small{display:block;font-size:13px;opacity:.7}
+.dev button{padding:8px 12px 11px;font-size:14px;min-width:84px}
+#msg{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--parch);border:3px solid var(--ink);padding:8px 14px 11px;font-size:15px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
+#msg.show{opacity:1}
+.who{display:flex;gap:8px;align-items:center;font-size:14px}.who input{flex:1;font-family:inherit;font-size:16px;padding:6px 8px;border:3px solid var(--ink);background:var(--parch-l)}
+.off{color:var(--bad)}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1><span id="name">Ember</span><small id="mood">…</small></h1>
+    <div class="sub" id="status">Connecting…</div>
+    <div class="bars" id="bars"></div>
+  </div>
+  <div class="card">
+    <h2>Interact</h2>
+    <div class="btns">
+      <button data-a="feed">Feed</button><button data-a="play" id="playB">Play</button><button data-a="pet">Pet</button><button data-a="tidy">Tidy</button>
+      <button data-a="spray" id="sprayB" class="hot">Spray</button><button data-a="sleep" id="sleepB">Sleep</button><button data-a="mischief">Mischief</button><button id="refresh">Refresh</button>
+    </div>
+    <div class="toys" id="toys"><button data-toy="ball">Ball</button><button data-toy="bubbles">Bubbles</button><button data-toy="music">Music</button><button data-toy="feather">Feather</button></div>
+  </div>
+  <div class="card"><h2>Home</h2><div id="devs"></div></div>
+  <div class="card who"><label for="by">Your name</label><input id="by" maxlength="24" placeholder="Shown on Ember's screen"></div>
+  <div id="msg"></div>
+<script>
+const $=s=>document.querySelector(s);
+let S=null, CTRL=[];
+const by=()=>$('#by').value.trim()||'Someone';
+try{ $('#by').value=localStorage.getItem('ember-by')||''; }catch(e){}
+$('#by').addEventListener('input',()=>{ try{ localStorage.setItem('ember-by',$('#by').value); }catch(e){} });
+let mt; function msg(t){ const m=$('#msg'); m.textContent=t; m.classList.add('show'); clearTimeout(mt); mt=setTimeout(()=>m.classList.remove('show'),2600); }
+async function post(path,body){
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({by:by(),...(body||{})})}); const j=await r.json();
+  if(!r.ok){ msg(j.error||'Error'); return; }
+  if(!j.screen_online){ msg('Sent, but no Ember screen is on right now'); return; }
+  for(let i=0;i<12;i++){ await new Promise(res=>setTimeout(res,500)); const a=await (await fetch(j.check,{cache:'no-store'})).json();
+    if(a.status==='done'){ msg(a.result&&a.result.ok?'Done!':(a.result&&a.result.msg)||'Ember said no'); break; } if(a.status==='expired'){ msg('Ember didn’t respond'); break; } }
+  load();
+}
+document.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{ const a=b.dataset.a; if(a==='play'){ $('#toys').classList.toggle('show'); return; } post(`/api/pet/${S&&S.pet&&S.pet.asleep&&a==='sleep'?'wake':a}`); });
+document.querySelectorAll('[data-toy]').forEach(b=>b.onclick=()=>{ $('#toys').classList.remove('show'); post('/api/pet/play',{toy:b.dataset.toy}); });
+$('#refresh').onclick=()=>load();
+function bar(label,v){ const c=v<25?'bad':v<50?'mid':''; return `<div class="bar">${label} ${v}<div><i class="${c}" style="width:${v}%"></i></div></div>`; }
+function stateText(d){ const a=d.attributes||{}, dom=d.entity_id.split('.')[0];
+  if(dom==='light') return d.state==='on'?`On · ${Math.round((a.brightness??255)/2.55)}%`:'Off';
+  if(dom==='climate') return `${Math.round(a.current_temperature)}° → ${a.temperature}°`;
+  if(dom==='cover') return d.state==='open'?'Open':'Closed'; if(dom==='lock') return d.state==='locked'?'Locked':'Unlocked'; return d.state==='on'?'On':'Off'; }
+async function load(){
+  try{
+    const [s,info]=await Promise.all([fetch('/api/state',{cache:'no-store'}).then(r=>r.json()),fetch('/api',{cache:'no-store'}).then(r=>r.json())]); S=s; CTRL=info.device_domains||[];
+    const p=s.pet; if(!p){ $('#status').textContent='Ember hasn’t checked in yet. Open the main screen.'; return; }
+    $('#name').textContent=p.name; $('#mood').textContent=p.mood;
+    const sess=p.session&&p.session.mode==='focus'?` · ${p.session.activity||'focus'} session, ${Math.max(0,Math.ceil((p.session.ends-Date.now())/60000))} min left`:'';
+    $('#status').innerHTML=(s.screen_online?`On the ${p.room} screen`:'<span class="off">No screen online</span>')+` · friendship ${p.friendship}${p.fires?` · <b class="off">${p.fires} fire${p.fires>1?'s':''}!</b>`:''}${p.misbehaving?' · <b>misbehaving</b>':''}${sess}`;
+    $('#bars').innerHTML=bar('Fuel',p.stats.fuel)+bar('Joy',p.stats.joy)+bar('Rest',p.stats.rest)+bar('Tidy',p.stats.tidy);
+    $('#sprayB').disabled=!(p.fires||p.misbehaving); $('#sleepB').textContent=p.asleep?'Wake':'Sleep';
+    $('#devs').innerHTML=s.devices.filter(d=>CTRL.includes(d.entity_id.split('.')[0])).map(d=>{ const dom=d.entity_id.split('.')[0], on=['on','open','unlocked'].includes(d.state);
+      const ctl=dom==='climate'?`<button data-t="${d.entity_id}" data-d="-1">−</button><button data-t="${d.entity_id}" data-d="1">+</button>`:`<button class="${on?'on':''}" data-e="${d.entity_id}">${dom==='cover'?(on?'Close':'Open'):(on?'Turn off':'Turn on')}</button>`;
+      return `<div class="dev"><span>${d.name}<small>${d.room} · ${stateText(d)}</small></span>${ctl}</div>`; }).join('')||'<div class="sub">No controllable devices.</div>';
+    document.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>post(`/api/devices/${b.dataset.e}/toggle`));
+    document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{ const d=s.devices.find(x=>x.entity_id===b.dataset.t); post(`/api/devices/${b.dataset.t}/set_temperature`,{temperature:(d.attributes.temperature||70)+(+b.dataset.d)}); });
+  }catch(e){ $('#status').textContent='Can’t reach Ember'; }
+}
+load(); setInterval(load,5000);
+</script>
+</body>
+</html>
