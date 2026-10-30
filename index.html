@@ -259,6 +259,10 @@ const CONFIG = {
   fps: 30,               // drop to 20 on a Pi Zero 2 W if it runs warm
   // Focus naps (sleep timer). Optional Home Assistant calls when a focus nap starts/ends,
   // e.g. onStart: [['light','turn_on',{entity_id:'light.desk', rgb_color:[255,80,40]}]]
+  // Play needs energy: won't start below these, quits mid-game below half of them
+  play: { minFuel:25, minRest:25 },
+  // Cleaning is unpleasant: cleaning again within grudgeMin minutes makes it worse
+  tidy: { grudgeMin:30 },
   focus: { choices:[5,15,25,45,60], breakMin:5, onStart:[], onEnd:[] },
   ha: {
     enabled: false,                                   // flip to true on your device
@@ -855,7 +859,7 @@ function actFeed(){
 function actPlay(){
   if(S.asleep){ say('zz'); return toast(`${S.name} is asleep… shh`); }
   if(busy()) return toast(`${S.name} is busy`);
-  if(st().rest<15){ setExpr('sad',1.5); say('moon'); return toast(`${S.name} is too sleepy to play`); }
+  const why=cantPlay(); if(why){ setExpr('sad',1.8); say(why.icon,2); sfx('no'); return toast(why.msg); }
   openChest();
 }
 /* ---- toy chest ---- */
@@ -877,7 +881,14 @@ $('#toys').addEventListener('click',e=>{ const b=e.target.closest('.toy'); if(!b
   $('#chest').classList.add('hidden'); startToy(t.id); });
 let bubbles=[], feather=null, music=null;
 const TUNE=[523,659,784,659,587,698,880,698,659,784,988,784,1046,880,784,659,523];
+function cantPlay(scale=1){ const P=CONFIG.play, s=st();
+  if(s.fuel<P.minFuel*scale) return {icon:R.foods[0], msg:`${S.name} is too hungry to play. Feed it first`};
+  if(s.rest<P.minRest*scale) return {icon:'moon', msg:`${S.name} is too sleepy to play. Let it nap`};
+  return null; }
+function quitPlay(why){ ball=null; bubbles=[]; feather=null; music=null; pet.toy=null; pet.state='idle'; pet.think=3; setExpr('sad',2.5); say(why.icon,2.2); sfx('no');
+  toast(why.msg.replace('to play','to keep playing')); }
 function startToy(id){
+  { const why=cantPlay(); if(why){ toast(why.msg); return; } }
   if(S.asleep||busy()) return;
   const B=R.playBox; pet.state='play'; pet.toy=id; pet.kicks=0; pet.actT=25; lastInteract=Date.now();
   if(id==='ball') ball={x:mobile()?rand(B.x0,B.x1):pet.cxD+rand(-4,4),y:B.top+2,vx:mobile()?rand(-12,12):0,vy:0,rest:0,done:0};
@@ -892,7 +903,9 @@ function startToy(id){
 const EFFECTS={
   eatLog:      { fuel:+38, joy:+3, tidy:-8 },
   eatSmall:    { fuel:+22, joy:+2, tidy:-5 },
-  tidy:        { tidy:+100, rest:-3, joy:-4 },
+  tidy:        { tidy:+100, rest:-6, joy:-10 },   // being swept is miserable
+  sweeping:    { joy:-1.5 },                    // per second while the broom is out
+  grudge:      { joy:-8, rest:-3 },             // cleaned again too soon
   squirt:      { fuel:-4, joy:-5 },                 // water on a fire… not fun
   mischief:    { tidy:-2.5, joy:+0.6 },            // per second of misbehaving (he's having a blast)  // he does NOT like being swept
   pet:         { joy:+1.5 },
@@ -1242,6 +1255,7 @@ function update(dt){
       else if(!food){ p.state='idle'; } break;
     case 'play': {
       p.actT-=dt; const B=R.playBox;
+      { const why=cantPlay(0.5); if(why){ quitPlay(why); break; } }
       if(p.toy==='bubbles'){
         p.bubT-=dt; if(p.bubN<8&&p.bubT<=0){ p.bubT=0.4; p.bubN++; const side=p.cxD<(B.x0+B.x1)/2?1:-1; bubbles.push({x:mobile()?(side>0?B.x1-2:B.x0+2):p.cxD+rand(-14,14),y:B.floor-8,vx:mobile()?-side*rand(6,16):rand(-4,4),vy:rand(-10,-4),r:Math.random()<0.4?3:2,age:0,seed:rand(0,6)}); }
         const popY=R.pet==='lantern'?p.glowY:p.headY-1;
@@ -1294,6 +1308,8 @@ function update(dt){
     case 'tidy': if(broom){ const bx=broomX()+4, near=Math.abs(bx-p.cxD)<12;
         setExpr('grumpy',0.3); p.lookUser=0; p.facing=bx<p.cxD?-1:1;          // glare at the broom
         p.grrT-=dt; if(p.grrT<=0){ p.grrT=rand(0.7,1.1); spawn({type:'dust',col:'#8a8480',x:p.cxD+rand(-3,3),y:p.sparkY,vx:rand(-6,6),vy:rand(-14,-8),life:0.9,s:2}); if(Math.random()<0.5) sfx('grr'); if(Math.random()<0.4) say('grr',1); }
+        p.sweepAcc=(p.sweepAcc||0)+dt; if(p.sweepAcc>=1){ p.sweepAcc=0; fx(EFFECTS.sweeping); }
+        if(Math.random()<dt*3) spawn({type:'steam',x:p.cxD+rand(-5,5),y:p.sparkY,vx:rand(-4,4),vy:rand(-10,-5),life:0.8});   // fuming
         p.dodgeT-=dt;
         if(mobile()){ if(near){ const away=bx<p.cxD?R.range[1]:R.range[0], d=away-p.x; if(Math.abs(d)>0.8){ p.x+=Math.sign(d)*Math.min(Math.abs(d),30*dt); p.walkT+=dt; } } }
         else if(near&&p.dodgeT<=0){ p.dodgeT=0.7; hop(40); } }
@@ -1303,7 +1319,8 @@ function update(dt){
   }
   if(food&&!food.landed){ food.vy+=200*dt; food.y+=food.vy*dt; const ly=mobile()?R.anchor.y:p.eatY; if(food.y>=ly){ food.y=ly; food.landed=true; burst(food.x,ly,5,'ember'); } if(!mobile()) food.x=p.cxD; }
   if(broom){ broom.t+=dt; const D=R.dirt; if(Math.random()<dt*25) spawn({type:'dust',col:D.cols[1],x:broomX()+rand(-2,4),y:D.y-rand(0,3),vx:rand(-8,8),vy:rand(-10,-3),g:10,life:rand(.4,.8),s:Math.random()<0.3?2:1});
-    if(broom.t>=2.4){ broom=null; S.scorch=S.scorch.filter(m=>m.room!==RID); const was=s.tidy; fx(EFFECTS.tidy); if(was<70) addFP(5); for(let i=0;i<6;i++) spawn({type:'sparkle',x:rand(D.x0,D.x1),y:D.y-rand(2,12),life:0.8}); p.state='idle'; p.think=4; p.facing=-p.facing; p.lookUser=0; say('grr',1.5); setExpr('grumpy',2.6); p.sulk=2.6; sfx('tidy'); } }
+    if(broom.t>=2.4){ broom=null; S.scorch=S.scorch.filter(m=>m.room!==RID); const was=s.tidy; fx(EFFECTS.tidy); if(was<70) addFP(5); for(let i=0;i<6;i++) spawn({type:'sparkle',x:rand(D.x0,D.x1),y:D.y-rand(2,12),life:0.8}); p.state='idle'; p.think=7; p.facing=-p.facing; p.lookUser=0; say('grr',2.2); setExpr('grumpy',6); p.sulk=6; sfx('grr');
+      const now=Date.now(); if(S.lastTidy&&now-S.lastTidy<CONFIG.tidy.grudgeMin*60000){ fx(EFFECTS.grudge); toast(`Again?! ${S.name} is really annoyed`); p.sulk=9; setExpr('grumpy',9); } S.lastTidy=now; } }
   for(const cl of clouds){ cl.x+=cl.v*dt; if(cl.x>R.win.x+R.win.w+2) cl.x=R.win.x-cl.img.width-2; }
   updParts(parts,dt); updParts(outParts,dt,R.win.y+R.win.h+1);
 }
@@ -1383,6 +1400,7 @@ cv.addEventListener('pointerup',e=>{ if(feather) feather.active=false; if(!ptr) 
 cv.addEventListener('pointercancel',()=>{ ptr=null; });
 function strokePet(pt){
   lastInteract=Date.now();
+  if(pet.sulk>1){ if(Math.random()<0.15){ say('grr',1); sfx('grr'); } return; }   // won't be petted while sulking
   spawn({type:'heart',x:pet.cxD+rand(-6,6),y:pet.bubY+4,vy:-16,life:1.2});
   if(R.pet==='lantern') pet.angV+=(pt.x<pet.cxD?1:-1)*0.15;
   const now=performance.now();
@@ -1397,6 +1415,7 @@ function tapScene(pt,wasPet){
   if(wasPet&&onPet(pt)){
     if(S.asleep){ if(S.timer&&S.timer.mode==='focus'){ say('zz',1.5); return toast(`Shh… ${Math.ceil((S.timer.end-Date.now())/60000)} min of focus left`); } wake(true); return; }
     if(pet.state==='play'||pet.state==='eat') return;
+    if(pet.sulk>0){ say('grr',1.2); pet.facing=pt.x<pet.cxD?1:-1; sfx('grr'); return; }   // still mad, turns away
     hop(70); pet.flare=1; burst(pet.cxD,pet.sparkY,8,'ember'); setExpr(Math.random()<0.5?'happy':'wow',1.4); pet.lookUser=2;
     say(['heart','note','bang','sparkle'][Math.floor(rand(0,4))],1.5); st().joy=clamp(st().joy+1,0,100); addFP(0.5); sfx('tap'); return;
   }
