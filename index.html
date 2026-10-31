@@ -1472,7 +1472,7 @@ function update(dt){
   chaosTick(dt);
   S.grudge=Math.max(0,S.grudge-dt*(6/3600));   // grudges fade ~6 points an hour on their own
   updateFires(dt);
-  dogUpdate(dt); windowDogUpdate(dt);
+  dogUpdate(dt); porchDogUpdate(dt); windowDogUpdate(dt);
   if(p.sulk>0){ p.sulk-=dt; if(p.sulk>1) p.lookUser=0; if(p.sulk<=0){ say('sparkle',1.6); setExpr('happy',1.5); hop(35); } }
 
   switch(p.state){
@@ -1587,7 +1587,7 @@ function render(){
   R.dyn(wctx,T);
   if(food){ const m=MAPS[food.kind]; const sc=1-(food.eaten||0); if(sc>0.05){ const w=Math.max(1,Math.round(m.w*sc)); wctx.save(); wctx.translate(food.x-w/2,food.y-m.h); wctx.scale(w/m.w,1); drawMap(wctx,m,0,0); wctx.restore(); } }
   if(broom&&!mobile()) drawMap(wctx,MAPS.broom,Math.round(broomX()),D.y-8);
-  drawDog(wctx,T);
+  drawDog(wctx,T); drawPorchDoorAndDog(wctx,T);
   const wxDark=wx==='rain'?0.18:(wx==='cloudy'||wx==='snow')?0.08:0;
   const closed=R.props.curtains&&on2(RP('curtains'));
   const tintA=clamp(dark*0.6+wxDark+(closed?0.12*(1-dark):0),0,0.75);
@@ -1894,9 +1894,9 @@ function dogUpdate(dt){
     case 'circle': d.pose='stand'; d.timer-=dt; if(d.timer<=0){ d.timer=0.35; d.facing*=-1; d.spins--; if(d.spins<=0){ d.state='sleep'; d.y=BED.y; d.next=rand(30,90); } } break;
   }
 }
-function drawDog(c,t){
-  if(!dogHere()) return;
-  const d=dog, f=d.facing, x=Math.round(d.x), y=Math.round(d.y+d.hop), g=Math.round(d.y);
+function drawDog(c,t){ if(dogHere()) drawDogBody(c,t,dog); }
+function drawDogBody(c,t,d){
+  const f=d.facing, x=Math.round(d.x), y=Math.round(d.y+d.hop), g=Math.round(d.y);
   const P=(xx,yy,col)=>{ c.fillStyle=col; c.fillRect(xx,yy,1,1); };
   const fur=(qx,qy,shadeBelow)=>qy>=shadeBelow?DOGC.s:(hash(qx*7,qy*3)>0.86?DOGC.s:DOGC.w);   // a little fur texture
   c.fillStyle='rgba(0,0,0,.18)'; c.fillRect(x-11,g,22,1); c.fillRect(x-9,g+1,18,1);
@@ -1949,10 +1949,40 @@ function tapDog(pt){
   fx({joy:+1}); addGrudge(-1); return true;   // Ember likes it when you're nice to Mandoo
 }
 
+/* ---- porch fire → Mandoo bursts out the front door for zoomies, then goes back inside ---- */
+const DOOR={x:43,y:58};
+const pdog={x:DOOR.x,y:DOOR.y,hop:0,hv:0,facing:1,pose:'run',state:'inside',t:0,tx:DOOR.x,ty:DOOR.y,barkT:0,wag:true,doorT:0};
+function porchDogUpdate(dt){
+  if(RID!==CONFIG.dog.window) return; const d=pdog; d.t+=dt; d.doorT=Math.max(0,d.doorT-dt);
+  if(d.hop<0||d.hv<0){ d.hv+=320*dt; d.hop+=d.hv*dt; if(d.hop>=0){ d.hop=0; d.hv=0; } }
+  const fire=roomFires().length>0, xMin=trainsShown()?56:12;
+  if(fire&&d.state==='inside'){ d.state='zoom'; d.x=DOOR.x; d.y=DOOR.y; d.doorT=1; d.tx=rand(xMin,150); d.ty=rand(57,68); d.hv=-70;
+    wdog.up=0; wdog.goal=0; playSeq([[900,.05,'square'],[1250,.07,'square']]); toast(`${CONFIG.dog.name} burst outside to join the chaos!`); }
+  if(d.state==='zoom'){ d.pose='run';
+    const dx=d.tx-d.x, dy=d.ty-d.y, dist=Math.hypot(dx,dy);
+    if(dist<2){ d.tx=rand(xMin,150); d.ty=rand(57,68); if(Math.random()<0.45) d.hv=-75; }
+    else { d.facing=Math.sign(dx)||d.facing; const sp=Math.min(dist,64*dt); d.x+=dx/dist*sp; d.y+=dy/dist*sp; }
+    d.barkT-=dt; if(d.barkT<=0){ d.barkT=rand(0.7,1.6); playSeq([[900,.05,'square'],[1250,.07,'square']]); spawn({type:'bang',x:d.x+10*d.facing,y:d.y-21,vy:-8,life:0.6}); }
+    if(Math.random()<dt*6) spawn({type:Math.random()<0.5?'heart':'note',x:d.x,y:d.y-16,vx:rand(-6,6),vy:-12,life:0.9});
+    if(Math.random()<dt*14) spawn({type:'dust',col:'#c8b8a0',x:d.x-4*d.facing,y:d.y-1,vx:-d.facing*rand(8,18),vy:rand(-8,-2),g:20,life:0.4});
+    if(!fire){ d.state='return'; toast(`${CONFIG.dog.name} trots back inside, a little disappointed`); } }
+  else if(d.state==='return'){ d.pose='run'; const dx=DOOR.x-d.x, dy=DOOR.y-d.y, dist=Math.hypot(dx,dy);
+    if(dist<1.5){ d.state='inside'; d.doorT=0.8; wdog.hold=2; wdog.goal=0; }
+    else { d.facing=Math.sign(dx)||d.facing; const sp=Math.min(dist,44*dt); d.x+=dx/dist*sp; d.y+=dy/dist*sp; if(dist<14) d.doorT=0.8; } }
+}
+function drawPorchDoorAndDog(c,t){
+  if(RID!==CONFIG.dog.window) return; const d=pdog;
+  if(d.doorT>0){ const lit=on('light.living_room');                       // door swung open
+    c.fillStyle=lit?'#c8945a':'#3a2a20'; c.fillRect(34,22,18,33); c.fillStyle=lit?'#a87444':'#2a1e18'; c.fillRect(34,46,18,9);
+    c.fillStyle='#3f6a4a'; c.fillRect(34,22,3,33); c.fillStyle='#2c4a34'; c.fillRect(36,22,1,33); }
+  if(d.state!=='inside') drawDogBody(c,t,d);
+}
+
 /* ---- Mandoo at the porch window: peeks out, ducks down, gets excited ---- */
 const wdog={up:0,goal:1,hold:rand(6,12),excite:0,tilt:0,tiltT:0,fog:0,barkT:0,t:0,lastPorch:null};
 function windowDogUpdate(dt){
   if(RID!==CONFIG.dog.window) return; const w=wdog; w.t+=dt;
+  if(pdog.state!=='inside'){ w.up=0; w.goal=0; w.excite=0; return; }
   const porch=on(RP('porchLight')); if(w.lastPorch!==null&&porch!==w.lastPorch) peekExcited(3); w.lastPorch=porch;
   const chaos=roomFires().length>0||pet.state==='mischief'||karaokeLive(); if(chaos) w.excite=Math.max(w.excite,0.5);
   w.excite=Math.max(0,w.excite-dt);
@@ -1990,7 +2020,7 @@ function drawWindowDog(c,t){
 function knockDoor(pt){   // knock knock → Mandoo goes off
   playSeq([[140,.06,'triangle'],[0.001,.08,'sine'],[140,.06,'triangle']]); spawn({type:'ring',x:pt.x,y:pt.y,life:0.3});
   setTimeout(()=>{ spawn({type:'ring',x:pt.x,y:pt.y,life:0.3}); },180);
-  wdog.barkT=0.25; peekExcited(5);
+  wdog.barkT=0.25; peekExcited(5); if(pdog.state==='zoom'){ pdog.tx=DOOR.x+rand(-6,6); pdog.ty=DOOR.y+2; }
   if(!S.asleep&&pet.state==='idle'){ pet.facing=-1; setExpr('wow',1.2); hop(30); }
   toast(`Knock knock! ${CONFIG.dog.name} is barking at the door`); }
 function tapWindowDog(pt){
