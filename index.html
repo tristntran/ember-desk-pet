@@ -363,6 +363,7 @@ const CONFIG = {
     alertWindow: { days:[1,2,3,4,5], from:7, to:10 },
   },
   // shared: thermostat heating makes the flame bigger; weather drives the window view
+  dog: { name:'Mandoo', room:'hearth' },   // the family Maltese
   props: { climate:'climate.ac', music:'media_player.living_room', weather:'weather.home' },
   // Rooms. Pick one per screen with a URL hash: …/index.html#hearth, #bedroom or #porch
   // props = which entity each tappable thing in that room mirrors; quick = bottom-bar chips
@@ -713,6 +714,8 @@ function buildHearth(season){
   r(51,19,6,1,'#c8a040'); r(53,14,2,5,'#f4ecd8'); r(54,13,1,1,'#2a2a2a');
   r(62,13,8,7,'#7a4a22'); r(63,14,6,5,'#f4ecd8'); r(65,15,1,2,'#3a2210'); r(66,16,1,1,'#3a2210');
   r(98,15,5,5,'#7ab8a8'); r(98,14,5,1,'#5c3a1a'); r(99,16,1,3,'#cfeee6');
+  // Mandoo's bed, cozy by the fire
+  for(let y=64;y<74;y++) for(let x=24;x<49;x++){ const dx=(x+.5-36.5)/12.5, dy=(y+.5-69.5)/4.6, dd=dx*dx+dy*dy; if(dd<=1) r(x,y,1,1, dd>0.55?((x+y)%3===0?'#7a2a2a':'#a83c3c'):(dd>0.42?'#6a2020':((x*3+y)%5===0?'#d8c0a0':'#e8d4b4'))); }
   // seasonal centrepiece
   if(season==='fall'){ r(78,16,7,4,'#f08a2c'); r(79,15,5,1,'#f08a2c'); r(79,20,5,0,'#c4621a'); r(81,16,1,4,'#c4621a'); r(79,17,1,2,'#ffb35c'); r(81,13,1,2,'#5c3a1a'); r(82,13,2,1,'#4f8a2e');
     r(87,17,4,3,'#e8c040'); r(88,16,2,1,'#e8c040'); r(88,15,1,1,'#5c3a1a'); }
@@ -1239,6 +1242,7 @@ function drawPart(c,p){ const a=clamp(1-(p.age/p.life)**2,0,1); c.globalAlpha=a;
     case 'zz': drawMap(c,MAPS.zz,x-2,y-2); break;
     case 'sparkle': if(Math.floor(p.age*12)%2===0) drawMap(c,MAPS.sparkle,x-2,y-2); break;
     case 'ember': c.fillStyle=p.cool?(p.age<p.life*0.5?'#ff5a24':'#a02a14'):p.age<p.life*0.4?'#fff2a0':(p.age<p.life*0.7?'#ffb23a':'#ff5a24'); c.fillRect(x,y,1,1); break;
+    case 'bang': drawMap(c,MAPS.bang,x-1,y-4); break;
     case 'dust': c.fillStyle=p.col||'#b8b0a4'; c.fillRect(x,y,p.s||1,p.s||1); break;
     case 'water': if(p.age<0) break; c.fillStyle=p.age<p.life*0.5?'#a8e0ff':'#5aa8ff'; c.fillRect(x,y,1,1); break;
     case 'smoke': { const sz=1+Math.floor(p.age*1.8); c.globalAlpha=a*0.55; c.fillStyle='#4a4246'; c.fillRect(x,y,sz,sz); break; }
@@ -1430,6 +1434,7 @@ function update(dt){
   if(p.douse>0) p.douse=Math.max(0,p.douse-dt*0.45);
   if(canMisbehave()&&Date.now()>=nextMischief) startMischief();
   updateFires(dt);
+  dogUpdate(dt);
   if(p.sulk>0){ p.sulk-=dt; if(p.sulk>1) p.lookUser=0; if(p.sulk<=0){ say('sparkle',1.6); setExpr('happy',1.5); hop(35); } }
 
   switch(p.state){
@@ -1541,6 +1546,7 @@ function render(){
   R.dyn(wctx,T);
   if(food){ const m=MAPS[food.kind]; const sc=1-(food.eaten||0); if(sc>0.05){ const w=Math.max(1,Math.round(m.w*sc)); wctx.save(); wctx.translate(food.x-w/2,food.y-m.h); wctx.scale(w/m.w,1); drawMap(wctx,m,0,0); wctx.restore(); } }
   if(broom&&!mobile()) drawMap(wctx,MAPS.broom,Math.round(broomX()),D.y-8);
+  drawDog(wctx,T);
   const wxDark=wx==='rain'?0.18:(wx==='cloudy'||wx==='snow')?0.08:0;
   const closed=R.props.curtains&&on2(RP('curtains'));
   const tintA=clamp(dark*0.6+wxDark+(closed?0.12*(1-dark):0),0,0.75);
@@ -1618,6 +1624,7 @@ function tapScene(pt,wasPet){
     hop(70); pet.flare=1; burst(pet.cxD,pet.sparkY,8,'ember'); setExpr(Math.random()<0.5?'happy':'wow',1.4); pet.lookUser=2;
     say(['heart','note','bang','sparkle'][Math.floor(rand(0,4))],1.5); st().joy=clamp(st().joy+1,0,100); addFP(0.5); sfx('tap'); return;
   }
+  if(tapDog(pt)) return;
   for(const [prop,rect] of Object.entries(R.props)){ if(inRect(pt,rect)){ if(prop==='karaoke'){ openKaraoke(); return; } const id=RP(prop); const e=Home.get(id);
     if(e){ if(dom(id)==='sensor'||dom(id)==='weather') toast(`${e.attributes.friendly_name}: ${stateText(e)}`); else toggleEntity(id); spawn({type:'ring',x:pt.x,y:pt.y,life:0.35}); } return; } }
   for(let i=bubbles.length-1;i>=0;i--){ const b=bubbles[i]; if(Math.hypot(pt.x-b.x,pt.y-b.y)<b.r+4){ popBubble(i,true); return; } }
@@ -1781,6 +1788,87 @@ function renderTrains(){
 }
 $('#trains').addEventListener('click',()=>{ $('#trSt').textContent='refreshing…'; refreshTrains(); sfx('ui'); });
 if(CONFIG.trains.enabled){ renderTrains(); refreshTrains(); setInterval(refreshTrains,CONFIG.trains.refreshSec*1000); setInterval(renderTrains,5000); }
+
+/* =====================================================================
+   MANDOO — the family Maltese. Sleeps cozy in her bed by the hearth,
+   gets the happy zoomies whenever there's chaos (fires, mischief), and
+   is a little disappointed when you put the fire out. She also eggs
+   Ember on sometimes.
+   ===================================================================== */
+const DOGC={w:'#fbfbff',s:'#e2deea',o:'#8e8a9c',k:'#1a1418',p:'#ff8fb0',bow:'#ff6fa0'};
+const BED={x:36,y:71};
+const dog={x:BED.x,y:BED.y,hop:0,hv:0,facing:1,pose:'sleep',state:'sleep',t:0,next:rand(25,60),tx:BED.x,zT:1,barkT:0,timer:0,spins:0,wag:false,chaos:false};
+const dogHere=()=>RID===CONFIG.dog.room;
+function blobFill(c,shapes,colFn,outline){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for(const s of shapes){ x0=Math.min(x0,Math.floor(s.x-s.rx)); x1=Math.max(x1,Math.ceil(s.x+s.rx)); y0=Math.min(y0,Math.floor(s.y-s.ry)); y1=Math.max(y1,Math.ceil(s.y+s.ry)); }
+  const inn=(px,py)=>shapes.some(s=>((px+0.5-s.x)/s.rx)**2+((py+0.5-s.y)/s.ry)**2<=1);
+  for(let py=y0;py<=y1;py++) for(let px=x0;px<=x1;px++){ if(!inn(px,py)) continue;
+    c.fillStyle=(!inn(px-1,py)||!inn(px+1,py)||!inn(px,py-1)||!inn(px,py+1))?outline:colFn(px,py); c.fillRect(px,py,1,1); } }
+function dogBark(happy=true){ const d=dog; playSeq(happy?[[900,.05,'square'],[1250,.07,'square']]:[[700,.12,'triangle'],[560,.18,'triangle']]);
+  spawn({type:'bang',x:d.x+8*d.facing,y:d.y-17,vy:-8,life:0.6}); }
+function dogUpdate(dt){
+  if(!dogHere()) return;
+  const d=dog; d.t+=dt;
+  if(d.hop<0||d.hv<0){ d.hv+=320*dt; d.hop+=d.hv*dt; if(d.hop>=0){ d.hop=0; d.hv=0; } }
+  const chaos=roomFires().length>0||pet.state==='mischief';
+  const fun=!chaos&&(pet.state==='play'||karaokeLive());
+  if(chaos&&d.state!=='zoom'){ d.state='zoom'; d.tx=rand(10,150); d.hv=-80; dogBark(); toast(`${CONFIG.dog.name} has the zoomies!`); }
+  if(!chaos&&d.chaos){ toast(`${CONFIG.dog.name} looks disappointed the fun is over`); dogBark(false); }   // she wanted more chaos
+  d.chaos=chaos; d.wag=false;
+  switch(d.state){
+    case 'sleep': d.pose='sleep';
+      d.zT-=dt; if(d.zT<=0){ d.zT=2.4; spawn({type:'zz',x:d.x+7*d.facing,y:d.y-9,vx:3,vy:-5,life:2}); }
+      d.next-=dt;
+      if(fun){ d.state='watch'; d.timer=0; }
+      else if(d.next<=0&&!isNight()){ d.state='stir'; d.timer=rand(2.5,4); d.facing=pet.cxD>d.x?1:-1;
+        if(Math.random()<0.35&&S.settings.mischief!=='off'&&canMisbehave()){ nextMischief=Math.min(nextMischief,Date.now()+rand(10,40)*1000); dogBark(); toast(`${CONFIG.dog.name} is egging ${S.name} on…`); } }
+      else if(d.next<=0) d.next=rand(25,60);
+      break;
+    case 'stir': d.pose='stand'; d.timer-=dt; if(d.timer<1.2) d.wag=true; if(d.timer<=0){ d.state='circle'; d.spins=3; d.timer=0.35; } break;
+    case 'watch': d.pose='stand'; d.wag=true; d.facing=pet.cxD>d.x?1:-1;
+      if(Math.random()<dt*(karaokeLive()?1.6:0.7)&&d.hop===0) d.hv=-55;
+      if(!fun){ d.timer+=dt; if(d.timer>3){ d.state='circle'; d.spins=3; d.timer=0.35; } } else d.timer=0; break;
+    case 'zoom': { d.pose='run'; d.wag=true; const dd=d.tx-d.x;
+      if(Math.abs(dd)<2){ d.tx=rand(10,150); if(Math.random()<0.45) d.hv=-75; }
+      d.facing=Math.sign(dd)||d.facing; d.x+=Math.sign(dd)*Math.min(Math.abs(dd),64*dt); d.y=BED.y-1+Math.sin(d.t*2.1)*3;
+      d.barkT-=dt; if(d.barkT<=0){ d.barkT=rand(0.7,1.6); dogBark(); }
+      if(Math.random()<dt*6) spawn({type:Math.random()<0.5?'heart':'note',x:d.x,y:d.y-16,vx:rand(-6,6),vy:-12,life:0.9});   // pure joy
+      if(Math.random()<dt*14) spawn({type:'dust',col:'#c8b8a0',x:d.x-4*d.facing,y:d.y-1,vx:-d.facing*rand(8,18),vy:rand(-8,-2),g:20,life:0.4});
+      if(!chaos) d.state='home'; break; }
+    case 'home': { d.pose='run'; const dd=BED.x-d.x; d.y+=(BED.y-d.y)*Math.min(1,dt*4);
+      if(Math.abs(dd)<1){ d.x=BED.x; d.state='circle'; d.spins=3; d.timer=0.35; } else { d.facing=Math.sign(dd); d.x+=Math.sign(dd)*Math.min(Math.abs(dd),40*dt); } break; }
+    case 'circle': d.pose='stand'; d.timer-=dt; if(d.timer<=0){ d.timer=0.35; d.facing*=-1; d.spins--; if(d.spins<=0){ d.state='sleep'; d.y=BED.y; d.next=rand(30,90); } } break;
+  }
+}
+function drawDog(c,t){
+  if(!dogHere()) return;
+  const d=dog, f=d.facing, x=Math.round(d.x), y=Math.round(d.y+d.hop), g=Math.round(d.y);
+  c.fillStyle='rgba(0,0,0,.18)'; c.fillRect(x-8,g,16,1);
+  const X=v=>x+(f>0?v:-v-1), px=(v,yy,col)=>{ c.fillStyle=col; c.fillRect(X(v),yy,1,1); };
+  if(d.pose==='sleep'){ const br=Math.sin(t*1.5)*0.35;
+    blobFill(c,[{x:x+0.5-1*f,y:y-3.3,rx:8,ry:3.4+br},{x:x+0.5+5.5*f,y:y-3.8,rx:4,ry:3.1},{x:x+0.5+8.6*f,y:y-3.2,rx:1.9,ry:1.5},{x:x+0.5-6.5*f,y:y-5.6,rx:2.8,ry:1.5}],(qx,qy)=>qy>=y-2?DOGC.s:DOGC.w,DOGC.o);
+    for(let yy=y-6;yy<=y-2;yy++){ px(3,yy,DOGC.s); px(4,yy,DOGC.s); } px(3,y-1,DOGC.o);        // long floppy ear
+    px(6,y-4,DOGC.k); px(7,y-4,DOGC.k); px(10,y-3,DOGC.k);                                      // closed eye, nose
+    px(2,y-7,DOGC.bow); px(3,y-7,DOGC.bow);                                                      // tiny bow behind the ear
+    return; }
+  const run=d.pose==='run', ph=Math.sin(t*(run?24:0)), up=run?Math.round(Math.abs(ph)):0;
+  for(const [lx,i] of [[-4,0],[-2,1],[2,0],[4,1]]){ const lift=run&&((i===0)===(ph>0))?1:0;
+    c.fillStyle=DOGC.o; c.fillRect(X(lx),y-3-up-lift,1,3); c.fillStyle=DOGC.s; c.fillRect(X(lx+1),y-3-up-lift,1,3); }
+  const wag=d.wag?Math.sin(t*26)*0.9:0, Y=y-up;
+  blobFill(c,[{x:x+0.5-0.5*f,y:Y-5,rx:6.8,ry:3.5},{x:x+0.5+5.5*f,y:Y-8.6,rx:4,ry:3.8},{x:x+0.5+9*f,y:Y-7.6,rx:1.9,ry:1.6},{x:x+0.5-5*f+wag,y:Y-8.2,rx:3,ry:1.7}],(qx,qy)=>qy>=Y-4?DOGC.s:DOGC.w,DOGC.o);
+  for(let yy=Y-10;yy<=Y-4;yy++){ px(3,yy,DOGC.s); px(4,yy,DOGC.s); } px(3,Y-3,DOGC.o); px(4,Y-3,DOGC.o);   // long silky ear
+  px(7,Y-10,'#ffffff'); px(7,Y-9,DOGC.k); px(8,Y-9,DOGC.k); px(11,Y-8,DOGC.k);                   // eye with shine, button nose
+  if(run){ px(10,Y-6,DOGC.p); }                                                                   // panting
+  px(2,Y-11,DOGC.bow); px(3,Y-11,DOGC.bow);                                                       // tiny bow behind the ear
+}
+function tapDog(pt){
+  if(!dogHere()) return false; const d=dog;
+  if(!(pt.x>=d.x-9&&pt.x<=d.x+9&&pt.y>=d.y-15&&pt.y<=d.y+2)) return false;
+  for(let i=0;i<2;i++) spawn({type:'heart',x:d.x+rand(-4,4),y:d.y-12,vy:-14,life:1.1});
+  if(d.state==='sleep'){ d.wag=true; playSeq([[300,.12,'triangle']]); toast(`${CONFIG.dog.name} is snoozing by the fire`); }
+  else { if(d.hop===0) d.hv=-60; dogBark(); }
+  fx({joy:+1}); return true;   // Ember likes it when you're nice to Mandoo
+}
 
 /* =====================================================================
    NETWORK — when served by ember_server.py the Pi keeps Ember's state and
