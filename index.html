@@ -858,7 +858,7 @@ const ROOMS={
       if(on(lights)){ const cols=['#ffd84a','#ff9fb2','#a8e0ff','#b8f0a0']; let k=0; for(let x=100;x<158;x+=6,k++){ const y=21+Math.round(Math.sin((x-98)/60*Math.PI)*5); c.globalAlpha=0.6+0.4*Math.sin(t*3+k*1.3); c.fillStyle=cols[k%4]; c.fillRect(x,y,1,2); } c.globalAlpha=1; } } },
 
   porch:{ label:'Front door', pet:'lantern', anchor:{x:68,y:15}, win:{x:90,y:4,w:70,h:50}, glass:false, outdoor:true, build:buildPorch,
-    props:{ switch:[55,30,8,10], thermo:[78,18,8,17], window:[2,13,30,21] },
+    props:{ switch:[55,30,8,10], thermo:[78,18,8,17], window:[2,13,30,21], door:[32,20,22,35] },
     dirt:{x0:30,x1:80,y:57,cols:['#8a6a40','#b0402a','#6a5a40'],word:'dusty',clean:'The porch is already swept'},
     playBox:{x0:52,x1:86,top:8,floor:54}, foods:['oil'],
     burnables:[[43,57],[78,47],[14,30],[40,62],[60,56],[25,56]],
@@ -1666,7 +1666,7 @@ function tapScene(pt,wasPet){
     say(['heart','note','bang','sparkle'][Math.floor(rand(0,4))],1.5); st().joy=clamp(st().joy+1,0,100); addFP(0.5); sfx('tap'); return;
   }
   if(tapDog(pt)||tapWindowDog(pt)) return;
-  for(const [prop,rect] of Object.entries(R.props)){ if(inRect(pt,rect)){ if(prop==='karaoke'){ openKaraoke(); return; } const id=RP(prop); const e=Home.get(id);
+  for(const [prop,rect] of Object.entries(R.props)){ if(inRect(pt,rect)){ if(prop==='karaoke'){ openKaraoke(); return; } if(prop==='door'){ knockDoor(pt); return; } const id=RP(prop); const e=Home.get(id);
     if(e){ if(dom(id)==='sensor'||dom(id)==='weather') toast(`${e.attributes.friendly_name}: ${stateText(e)}`); else toggleEntity(id); spawn({type:'ring',x:pt.x,y:pt.y,life:0.35}); } return; } }
   for(let i=bubbles.length-1;i>=0;i--){ const b=bubbles[i]; if(Math.hypot(pt.x-b.x,pt.y-b.y)<b.r+4){ popBubble(i,true); return; } }
   if(ball&&Math.hypot(pt.x-ball.x,pt.y-(ball.y-3))<9){ ball.vy=-95; ball.vx=rand(-25,25); sfx('boop'); return; }
@@ -1987,6 +1987,12 @@ function drawWindowDog(c,t){
   }
   c.fillStyle='rgba(255,255,255,.22)'; c.fillRect(8,18,1,3); c.fillRect(9,18,1,1);                                                                       // glass glint
 }
+function knockDoor(pt){   // knock knock → Mandoo goes off
+  playSeq([[140,.06,'triangle'],[0.001,.08,'sine'],[140,.06,'triangle']]); spawn({type:'ring',x:pt.x,y:pt.y,life:0.3});
+  setTimeout(()=>{ spawn({type:'ring',x:pt.x,y:pt.y,life:0.3}); },180);
+  wdog.barkT=0.25; peekExcited(5);
+  if(!S.asleep&&pet.state==='idle'){ pet.facing=-1; setExpr('wow',1.2); hop(30); }
+  toast(`Knock knock! ${CONFIG.dog.name} is barking at the door`); }
 function tapWindowDog(pt){
   if(RID!==CONFIG.dog.window||!inRect(pt,R.props.window)) return false;
   peekExcited(4); for(let i=0;i<2;i++) spawn({type:'heart',x:17+rand(-4,4),y:18,vy:-12,life:1});
