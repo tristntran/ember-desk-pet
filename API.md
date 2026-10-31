@@ -39,13 +39,12 @@ Base URL: `http://<pi-address>:8080`. CORS is open, so any web page on your netw
 
 | Service | Body | For |
 |---|---|---|
-| `toggle`, `turn_on`, `turn_off` | `{"brightness_pct": 40}` (lights only) | lights, switches, fans |
-| `open`, `close` | | covers (curtains, blinds) |
-| `set_temperature` | `{"temperature": 70}` | climate |
-| `lock`, `unlock` | | locks, **only if you allow them** (see below) |
+| `toggle`, `turn_on`, `turn_off` | `{"brightness_pct": 40}` (lights only) | lights, the AC, music |
+| `set_temperature` | `{"temperature": 72}` | the AC |
+| `play_pause`, `play`, `pause`, `next`, `previous` | | music |
+| `volume_set` | `{"volume_level": 0.4}` (0–1) | music |
 
-The server only allows domains listed in `EMBER_API_DOMAINS`, which defaults to `light,switch,fan,cover,climate`. **Locks are off by default.** To let the API lock and unlock doors, start the server with
-`EMBER_API_DOMAINS=light,switch,fan,cover,climate,lock`.
+The server only allows the domains in `EMBER_API_DOMAINS`, which defaults to `light,climate,media_player`.
 
 ## Examples
 
@@ -55,6 +54,8 @@ curl -X POST http://ember.local:8080/api/pet/feed -d '{"by":"Kat"}'
 curl -X POST http://ember.local:8080/api/pet/play -d '{"toy":"bubbles","by":"Kat"}'
 curl -X POST http://ember.local:8080/api/devices/light.kitchen/toggle
 curl -X POST http://ember.local:8080/api/devices/light.living_room/turn_on -d '{"brightness_pct":30}'
+curl -X POST http://ember.local:8080/api/devices/media_player.living_room/play_pause
+curl -X POST http://ember.local:8080/api/devices/climate.ac/set_temperature -d '{"temperature":71}'
 curl http://ember.local:8080/api/actions/3f9c1a2b7d        # did it work?
 ```
 

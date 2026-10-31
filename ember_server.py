@@ -13,8 +13,7 @@ Environment:
   EMBER_HOST          bind address (default 0.0.0.0 = whole LAN; use 127.0.0.1 for this machine only)
   EMBER_PORT          port (default 8080)
   EMBER_STATE         state file (default ./ember_state.json)
-  EMBER_API_DOMAINS   device domains the API may control (default light,switch,fan,cover,climate)
-                      add "lock" to let the API lock/unlock doors
+  EMBER_API_DOMAINS   device domains the API may control (default light,climate,media_player)
   EMBER_API_TOKEN     optional: if set, every POST must send header  X-Ember-Token: <token>
 """
 import http.server
@@ -31,7 +30,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 HOST = os.environ.get("EMBER_HOST", "0.0.0.0")
 PORT = int(os.environ.get("EMBER_PORT", "8080"))
 STATE_FILE = os.environ.get("EMBER_STATE", os.path.join(HERE, "ember_state.json"))
-API_DOMAINS = {d.strip() for d in os.environ.get("EMBER_API_DOMAINS", "light,switch,fan,cover,climate").split(",") if d.strip()}
+API_DOMAINS = {d.strip() for d in os.environ.get("EMBER_API_DOMAINS", "light,climate,media_player").split(",") if d.strip()}
 API_TOKEN = os.environ.get("EMBER_API_TOKEN", "")
 
 MTA_BASE = os.environ.get("MTA_BASE", "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2F")
@@ -40,7 +39,7 @@ MTA_CACHE_SECONDS = 20
 
 PET_ACTIONS = {"feed", "play", "pet", "tidy", "sleep", "wake", "spray", "mischief"}
 TOYS = {"ball", "bubbles", "music", "feather"}
-DEVICE_SERVICES = {"toggle", "turn_on", "turn_off", "lock", "unlock", "open", "close", "set_temperature"}
+DEVICE_SERVICES = {"toggle", "turn_on", "turn_off", "set_temperature", "play_pause", "play", "pause", "next", "previous", "volume_set"}
 STATIC_FILES = {"/index.html", "/remote.html", "/config.local.js"}
 LEASE_SECONDS = 10      # a screen must check in this often to stay the one running Ember
 ACTION_TTL = 120         # queued actions expire if no screen picks them up
@@ -257,7 +256,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 known = {d.get("entity_id") for d in (state["summary"] or {}).get("devices", [])}
                 if known and entity not in known:
                     return self.send_json({"error": "unknown entity", "known": sorted(known)}, 404)
-                data = {k: v for k, v in body.items() if k in ("brightness_pct", "temperature")}
+                data = {k: v for k, v in body.items() if k in ("brightness_pct", "temperature", "volume_level")}
                 a = enqueue({"type": "device", "entity_id": entity, "service": service, "data": data}, by)
                 online = bool(leader_alive())
             return self.send_json({"queued": a["id"], "screen_online": online, "check": f"/api/actions/{a['id']}"}, 202)

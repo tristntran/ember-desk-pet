@@ -26,7 +26,8 @@ button:disabled{opacity:.45}
 .toys{display:none;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}.toys.show{display:grid}
 .dev{display:flex;align-items:center;gap:10px;padding:6px 0;border-top:2px dashed var(--parch-d)}
 .dev:first-of-type{border-top:0}.dev span{flex:1;font-size:16px}.dev small{display:block;font-size:13px;opacity:.7}
-.dev button{padding:8px 12px 11px;font-size:14px;min-width:84px}
+.dev button{padding:8px 10px 11px;font-size:14px;min-width:52px}
+.dev span{min-width:0}
 #msg{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--parch);border:3px solid var(--ink);padding:8px 14px 11px;font-size:15px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
 #msg.show{opacity:1}
 .who{display:flex;gap:8px;align-items:center;font-size:14px}.who input{flex:1;font-family:inherit;font-size:16px;padding:6px 8px;border:3px solid var(--ink);background:var(--parch-l)}
@@ -71,8 +72,8 @@ $('#refresh').onclick=()=>load();
 function bar(label,v){ const c=v<25?'bad':v<50?'mid':''; return `<div class="bar">${label} ${v}<div><i class="${c}" style="width:${v}%"></i></div></div>`; }
 function stateText(d){ const a=d.attributes||{}, dom=d.entity_id.split('.')[0];
   if(dom==='light') return d.state==='on'?`On · ${Math.round((a.brightness??255)/2.55)}%`:'Off';
-  if(dom==='climate') return `${Math.round(a.current_temperature)}° → ${a.temperature}°`;
-  if(dom==='cover') return d.state==='open'?'Open':'Closed'; if(dom==='lock') return d.state==='locked'?'Locked':'Unlocked'; return d.state==='on'?'On':'Off'; }
+  if(dom==='climate') return d.state==='off'?`Off · ${Math.round(a.current_temperature)}° now`:`Cooling to ${a.temperature}° · ${Math.round(a.current_temperature)}° now`;
+  if(dom==='media_player') return `${d.state==='playing'?'Playing':'Paused'} · ${a.media_title||''}`; return d.state==='on'?'On':'Off'; }
 async function load(){
   try{
     const [s,info]=await Promise.all([fetch('/api/state',{cache:'no-store'}).then(r=>r.json()),fetch('/api',{cache:'no-store'}).then(r=>r.json())]); S=s; CTRL=info.device_domains||[];
@@ -83,9 +84,12 @@ async function load(){
     $('#bars').innerHTML=bar('Fuel',p.stats.fuel)+bar('Joy',p.stats.joy)+bar('Rest',p.stats.rest)+bar('Tidy',p.stats.tidy);
     $('#sprayB').disabled=!(p.fires||p.misbehaving); $('#sleepB').textContent=p.asleep?'Wake':'Sleep';
     $('#devs').innerHTML=s.devices.filter(d=>CTRL.includes(d.entity_id.split('.')[0])).map(d=>{ const dom=d.entity_id.split('.')[0], on=['on','open','unlocked'].includes(d.state);
-      const ctl=dom==='climate'?`<button data-t="${d.entity_id}" data-d="-1">−</button><button data-t="${d.entity_id}" data-d="1">+</button>`:`<button class="${on?'on':''}" data-e="${d.entity_id}">${dom==='cover'?(on?'Close':'Open'):(on?'Turn off':'Turn on')}</button>`;
+      const ctl=dom==='climate'?`<button class="${d.state!=='off'?'on':''}" data-e="${d.entity_id}">${d.state==='off'?'On':'Off'}</button><button data-t="${d.entity_id}" data-d="-1">−</button><button data-t="${d.entity_id}" data-d="1">+</button>`
+        :dom==='media_player'?`<button class="${d.state==='playing'?'on':''}" data-m="${d.entity_id}" data-s="play_pause">${d.state==='playing'?'Pause':'Play'}</button><button data-m="${d.entity_id}" data-s="next">Next</button>`
+        :`<button class="${on?'on':''}" data-e="${d.entity_id}">${on?'Turn off':'Turn on'}</button>`;
       return `<div class="dev"><span>${d.name}<small>${d.room} · ${stateText(d)}</small></span>${ctl}</div>`; }).join('')||'<div class="sub">No controllable devices.</div>';
     document.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>post(`/api/devices/${b.dataset.e}/toggle`));
+    document.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>post(`/api/devices/${b.dataset.m}/${b.dataset.s}`));
     document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{ const d=s.devices.find(x=>x.entity_id===b.dataset.t); post(`/api/devices/${b.dataset.t}/set_temperature`,{temperature:(d.attributes.temperature||70)+(+b.dataset.d)}); });
   }catch(e){ $('#status').textContent='Can’t reach Ember'; }
 }

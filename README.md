@@ -10,14 +10,14 @@ chromium-browser --kiosk http://localhost:8080/#hearth     # or #bedroom, #porch
 ```
 - Other screens on the network: `http://<pi>:8080/#bedroom`. They mirror the Ember on the main screen.
 - Phone remote for anyone on your network: `http://<pi>:8080/remote`
-- API for scripts and other apps: see [API.md](API.md). Locks are off by default.
+- API for scripts and other apps: see [API.md](API.md).
 
 ## Rooms
 | Hash | Ember is… | Tappable props |
 |---|---|---|
-| `#hearth` | an ember on the logs | lamp, lantern, candle, curtains |
-| `#bedroom` | a little candle | floor lamp, ceiling fan, fairy lights, curtains |
-| `#porch` | the porch lantern | front-door lock, porch-light switch, thermometer (+ subway board) |
+| `#hearth` | an ember on the logs | lamp, lantern, candle, radio (music) |
+| `#bedroom` | a little candle | floor lamp, ceiling fan (the AC), fairy lights |
+| `#porch` | the porch lantern | porch-light switch, thermometer (+ subway board) |
 
 ## Configure
 - Shared settings: `CONFIG` at the top of `index.html` (rooms, entities, trains, focus naps).
