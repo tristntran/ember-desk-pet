@@ -15,7 +15,7 @@ chromium-browser --kiosk http://localhost:8080/#hearth     # or #bedroom, #porch
 ## Rooms
 | Hash | Ember is… | Tappable props |
 |---|---|---|
-| `#hearth` | an ember on the logs | lamp, lantern, candle, radio (music) |
+| `#hearth` | an ember on the logs | lamp, lantern, candle, radio (music), karaoke machine (singer queue) |
 | `#bedroom` | a little candle | floor lamp, ceiling fan (the AC), fairy lights |
 | `#porch` | the porch lantern | porch-light switch, thermometer (+ subway board) |
 

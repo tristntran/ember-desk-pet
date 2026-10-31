@@ -18,6 +18,7 @@ Environment:
 """
 import http.server
 import json
+import socket
 import os
 import socketserver
 import threading
@@ -40,12 +41,12 @@ MTA_CACHE_SECONDS = 20
 PET_ACTIONS = {"feed", "play", "pet", "tidy", "sleep", "wake", "spray", "mischief"}
 TOYS = {"ball", "bubbles", "music", "feather"}
 DEVICE_SERVICES = {"toggle", "turn_on", "turn_off", "set_temperature", "play_pause", "play", "pause", "next", "previous", "volume_set"}
-STATIC_FILES = {"/index.html", "/remote.html", "/config.local.js"}
+STATIC_FILES = {"/index.html", "/remote.html", "/config.local.js", "/vendor/qrcode.js"}
 LEASE_SECONDS = 10      # a screen must check in this often to stay the one running Ember
 ACTION_TTL = 120         # queued actions expire if no screen picks them up
 
 lock = threading.RLock()
-state = {"full": None, "summary": None, "updated": 0}
+state = {"full": None, "summary": None, "updated": 0, "karaoke": {"current": None, "queue": []}}
 queue = []               # [{id, created, action, status, result, by}]
 lease = {"id": None, "room": None, "until": 0}
 _mta_cache, _mta_locks = {}, {f: threading.Lock() for f in FEEDS}
@@ -56,7 +57,9 @@ def load_state():
     try:
         with open(STATE_FILE) as f:
             data = json.load(f)
-        state.update({k: data.get(k) for k in ("full", "summary", "updated")})
+        state.update({k: data.get(k) for k in ("full", "summary", "updated") if k in data})
+        if isinstance(data.get("karaoke"), dict):
+            state["karaoke"] = data["karaoke"]
     except (OSError, ValueError):
         pass
 
@@ -70,6 +73,21 @@ def save_state(force=False):
     with open(tmp, "w") as f:
         json.dump(state, f)
     os.replace(tmp, STATE_FILE)
+
+
+def lan_url():
+    """Best guess at this machine's address on the LAN (for the QR code on the karaoke screen)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))          # no packets are sent; just picks the outbound interface
+            ip = s.getsockname()[0]
+    except OSError:
+        ip = "127.0.0.1"
+    return f"http://{ip}:{PORT}"
+
+
+def clean(text, n):
+    return " ".join(str(text or "").split())[:n]
 
 
 def leader_alive():
@@ -164,7 +182,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "name": "Ember API", "docs": "See API.md",
                 "pet_actions": sorted(PET_ACTIONS), "toys": sorted(TOYS),
                 "device_domains": sorted(API_DOMAINS), "device_services": sorted(DEVICE_SERVICES),
-                "token_required_for_post": bool(API_TOKEN)})
+                "token_required_for_post": bool(API_TOKEN), "lan_url": lan_url(), "remote": lan_url() + "/remote"})
         if p == "/api/ping":
             return self.send_json({"ok": True, "screen_online": bool(leader_alive())})
         if p == "/api/state":
@@ -174,6 +192,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if "full" in q:
                     out["full"] = state["full"]
             return self.send_json(out)
+        if p == "/api/karaoke":
+            with lock:
+                return self.send_json(state["karaoke"])
         if p.startswith("/api/actions/"):
             aid = p.rsplit("/", 1)[-1]
             with lock:
@@ -240,6 +261,42 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 a = enqueue({"type": "pet", "action": action, "toy": toy}, by)
                 online = bool(leader_alive())
             return self.send_json({"queued": a["id"], "screen_online": online, "check": f"/api/actions/{a['id']}"}, 202)
+
+        # --- public: karaoke queue (kept on the server, works even with no screen on) ---
+        if p.startswith("/api/karaoke/"):
+            op = p.rsplit("/", 1)[-1]
+            with lock:
+                k = state["karaoke"]
+                if op == "join":
+                    name, song = clean(body.get("name"), 24), clean(body.get("song"), 60)
+                    if not name:
+                        return self.send_json({"error": "name is required"}, 400)
+                    entry = {"id": uuid.uuid4().hex[:8], "name": name, "song": song, "added": time.time()}
+                    k["queue"].append(entry)
+                    k["queue"] = k["queue"][-50:]
+                    pos = len(k["queue"]) + (1 if k["current"] else 0)
+                    out = {"ok": True, "entry": entry, "position": pos}
+                elif op == "next":
+                    k["current"] = k["queue"].pop(0) if k["queue"] else None
+                    if k["current"]:
+                        k["current"]["started"] = time.time()
+                    out = {"ok": True, "current": k["current"]}
+                elif op == "remove":
+                    rid = body.get("id")
+                    before = len(k["queue"])
+                    k["queue"] = [e for e in k["queue"] if e["id"] != rid]
+                    if k["current"] and k["current"]["id"] == rid:
+                        k["current"] = None
+                        before += 1
+                    out = {"ok": before != len(k["queue"])}
+                elif op == "clear":
+                    k.update({"current": None, "queue": []})
+                    out = {"ok": True}
+                else:
+                    return self.send_json({"error": "use join, next, remove or clear"}, 400)
+                save_state(force=True)
+                out["karaoke"] = k
+            return self.send_json(out)
 
         # --- public: smart-home control ---
         if p.startswith("/api/devices/"):

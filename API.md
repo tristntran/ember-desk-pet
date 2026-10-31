@@ -33,6 +33,20 @@ Base URL: `http://<pi-address>:8080`. CORS is open, so any web page on your netw
 | `spray` | | Puts out the biggest fire, or squirts Ember if it's misbehaving |
 | `mischief` | | Makes Ember misbehave now, if mischief is turned on |
 
+## Karaoke queue
+
+The Pi keeps the queue itself, so it works even when no screen is on. Every screen and phone sees the same list.
+
+| Method | Path | Body | |
+|---|---|---|---|
+| GET | `/api/karaoke` | | `{current, queue}` |
+| POST | `/api/karaoke/join` | `{"name":"Kat","song":"optional"}` | Returns your `position` |
+| POST | `/api/karaoke/next` | | Moves the next person in line to the mic |
+| POST | `/api/karaoke/remove` | `{"id":"…"}` | |
+| POST | `/api/karaoke/clear` | | |
+
+`GET /api` also returns `remote`, the remote's address on your network. The karaoke screen turns it into a QR code.
+
 ## Controlling the house
 
 `POST /api/devices/<entity_id>/<service>`

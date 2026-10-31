@@ -181,6 +181,25 @@ img.ico{image-rendering:pixelated;display:block}
 .lr.great{background:#c9ecb0}.lr.meh{background:#f4d0b0}.lr.stopped{opacity:.6}
 .ln{flex-basis:100%;padding-left:94px;font-size:13px;opacity:.8}
 .lempty{font-size:14px;opacity:.6;padding:8px 0}
+#karaoke .board{width:760px;height:440px}
+.kgrid{display:grid;grid-template-columns:1.15fr 1fr;gap:14px;margin-top:10px;flex:1;min-height:0}
+.kleft{display:flex;flex-direction:column;gap:10px;min-height:0}
+.know{display:flex;align-items:center;gap:10px;background:#3a2a4a;color:#fff2cf;border:3px solid var(--ink);padding:10px 12px;box-shadow:inset 0 0 0 2px #ff7ad0}
+.know>div{flex:1;min-width:0}.kl{font-size:12px;opacity:.75;text-transform:uppercase;letter-spacing:1px}.kn{font-size:24px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ks{font-size:14px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#kNext{height:52px;padding:0 14px 4px;font-size:16px;font-weight:700;color:var(--ink);background:#ffe89a;border:3px solid var(--ink);box-shadow:inset 0 -5px 0 #f0c45a}
+#kNext:disabled{opacity:.45}
+.klist{flex:1;overflow-y:auto;touch-action:pan-y;border:3px solid var(--parch-d);background:var(--parch-l);padding:4px 8px}
+.kq{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:2px dashed var(--parch-d)}.kq:last-child{border-bottom:0}
+.kq b{width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:var(--wood);color:#fff7e0;border:2px solid var(--ink);flex:none}
+.kq span{flex:1;font-size:17px;font-weight:600;min-width:0}.kq small{display:block;font-size:13px;font-weight:400;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kq button{width:34px;height:32px;font-weight:700;background:var(--parch);border:3px solid var(--ink);padding:0}
+.kempty{font-size:15px;opacity:.6;padding:10px 2px}
+.kright{display:flex;flex-direction:column;gap:8px}
+.kright input{font-family:inherit;font-size:17px;padding:8px 10px;border:3px solid var(--ink);background:var(--parch-l);color:var(--ink);user-select:text;-webkit-user-select:text}
+#kAdd{height:50px;font-size:17px;font-weight:700;background:#ffe89a;border:3px solid var(--ink);box-shadow:inset 0 -5px 0 #f0c45a,0 4px 0 var(--wood-dd)}
+.kphone{display:flex;align-items:center;gap:12px;margin-top:auto;background:var(--parch-l);border:3px solid var(--ink);padding:8px}
+#kQR{width:112px;height:112px;flex:none}#kQR:empty{display:none}#kQR img,#kQR canvas{display:block}
+.kphone b{display:block;font-size:16px}.kphone span{font-size:13px;opacity:.75;word-break:break-all}
 #dimmer{position:absolute;inset:0;background:rgba(0,0,8,.55);pointer-events:none;opacity:0;transition:opacity 1.5s;z-index:30}
 #dimmer.on{opacity:1}
 </style>
@@ -265,6 +284,24 @@ img.ico{image-rendering:pixelated;display:block}
     </div>
   </div>
 
+  <div id="karaoke" class="overlay hidden">
+    <div class="board wood">
+      <div class="hhead"><h2>Karaoke Night</h2><button class="lbtn" id="kClear">Clear</button><button class="xbtn" data-close="karaoke">X</button></div>
+      <div class="kgrid">
+        <div class="kleft">
+          <div class="know"><div id="kNow"></div><button id="kNext">Start</button></div>
+          <div class="klist" id="kQueue"></div>
+        </div>
+        <div class="kright">
+          <input type="text" id="kName" maxlength="24" placeholder="Your name">
+          <input type="text" id="kSong" maxlength="60" placeholder="Song (optional)">
+          <button id="kAdd">Add me to the queue</button>
+          <div class="kphone"><div id="kQR"></div><div><b>Join from your phone</b><span id="kURL"></span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="settings" class="overlay hidden">
     <div class="board wood">
       <div class="hhead"><h2>Settings</h2><button class="xbtn" data-close="settings">X</button></div>
@@ -277,7 +314,7 @@ img.ico{image-rendering:pixelated;display:block}
       <div class="srow"><label>Weather</label><div class="seg" data-set="weather"></div></div>
       <div class="srow"><label>Trains</label><div class="seg" data-set="trains"></div></div>
       <div class="srow"><label>Screen</label><div class="seg"><button id="fsBtn">Fullscreen</button><button id="resetBtn">Reset pet</button></div></div>
-      <div class="hint">Tip: tap the lamp, lantern, candle or radio (hearth), the lamp, fan/AC or fairy lights (bedroom), or the porch-light switch to control them. Season, time and weather follow the real clock and your weather entity when set to Auto.</div>
+      <div class="hint">Tip: tap the lamp, lantern, candle, radio or karaoke machine (hearth), the lamp, fan/AC or fairy lights (bedroom), or the porch-light switch to control them. Season, time and weather follow the real clock and your weather entity when set to Auto.</div>
     </div>
   </div>
 
@@ -665,6 +702,9 @@ function buildHearth(season){
   // side table
   r(121,48,24,2,'#7a4a22'); r(121,48,24,1,'#a8703a'); r(123,50,2,9,'#5c3a1a'); r(141,50,2,9,'#5c3a1a'); r(123,54,20,1,'#5c3a1a');
   r(130,43,3,5,'#c8a040'); r(128,47,7,1,'#8a6a20'); // lamp stem
+  // karaoke machine + mic stand (floor, right of the table)
+  r(148,51,11,9,'#3a2a4a'); r(148,51,11,1,'#5a4a6a'); r(149,52,9,3,'#1a1a2a'); r(149,56,9,3,'#2a2034'); for(let x=150;x<158;x+=2) r(x,57,1,1,'#4a3a5a'); r(148,60,2,1,'#2a2034'); r(157,60,2,1,'#2a2034');
+  r(146,43,1,17,'#2a2a30'); r(144,59,5,1,'#2a2a30'); r(145,41,3,2,'#7a7a88'); r(145,41,3,1,'#a8a8b8');
   r(136,43,8,5,'#8a5a30'); r(136,43,8,1,'#a8703a'); r(137,44,3,3,'#3a2210'); r(141,44,2,1,'#e0b050'); r(141,46,2,1,'#c8a040'); r(143,39,1,4,'#3a3a44'); // radio
   // lantern chain + frame
   for(let y=5;y<18;y++) if(y%2) r(150,y,1,1,'#4a4a56');
@@ -760,7 +800,7 @@ function buildPorch(season){
 /* ---------------- room table ---------------- */
 const ROOMS={
   hearth:{ label:'Hearth', pet:'ember', anchor:{x:80,y:57}, range:[67,93], win:HEARTH_WIN, glass:true, build:buildHearth,
-    props:{ lamp:[124,33,12,16], lantern:[145,14,11,15], candle:[49,10,9,11], radio:[134,38,12,11] },
+    props:{ lamp:[124,33,12,16], lantern:[145,14,11,15], candle:[49,10,9,11], radio:[134,38,10,11], karaoke:[143,39,17,23] },
     dirt:{x0:HX0+1,x1:HX1-1,y:59,cols:['#8a8480','#a8a29c','#6a6460'],word:'sooty',clean:'The hearth is already spotless'},
     playBox:{x0:HX0+3,x1:HX1-4,top:HTOP+4,floor:57}, foods:['log','pinecone'],
     burnables:[[56,68],[104,69],[24,51],[7,40],[41,40],[132,47],[80,72]],
@@ -773,6 +813,10 @@ const ROOMS={
       c.globalCompositeOperation='source-over';
       if(on(lamp)) drawShade(c,true);
       if(on(lan)){ c.fillStyle='#ffe08a'; c.fillRect(148,20,5,6); c.fillStyle='#fff6cf'; c.fillRect(149,21,1,3); c.fillStyle=Math.sin(t*9)>0?'#ffb23a':'#ff9a2a'; c.fillRect(150,23,1,2); }
+      { const k=kState(), live=!!k.current, wait=!live&&k.queue.length>0;
+        if(live||wait){ const hue=['#ff7ad0','#7ad8ff','#ffe066','#9aff7a'][Math.floor(t*2)%4]; c.fillStyle=live?hue:'#6a5a8a'; c.fillRect(149,52,9,3);
+          if(live){ c.fillStyle='#fff2cf'; c.fillRect(150+Math.floor(t*6)%6,53,2,1); c.fillStyle='#ffe066'; c.fillRect(145,41,3,1); } }
+        if(live){ c.globalCompositeOperation='lighter'; ['255,122,208','122,216,255','255,224,102'].forEach((col,i)=>{ const x=80+Math.sin(t*0.9+i*2.1)*58, y=58+Math.cos(t*1.3+i)*9; glow(x,y,16,`rgba(${col},${0.14+0.18*tintA})`); }); glow(153,54,10,'rgba(255,122,208,.25)'); c.globalCompositeOperation='source-over'; } }
       if(musicPlaying()){ const pu=Math.sin(t*8)>0; c.fillStyle=pu?'#e0b050':'#8a5a30'; c.fillRect(137,44,3,3); c.fillStyle='#ff9a3a'; c.fillRect(141,44,2,1); if(Math.random()<0.02) spawn({type:'note',x:140,y:40,vx:rand(-4,4),vy:-10,life:1.4}); }
       if(on(cnd)){ c.fillStyle='#ffb23a'; c.fillRect(54,11+(Math.sin(t*10)>0.6?-1:0),1,2); c.fillStyle='#fff4b0'; c.fillRect(54,12,1,1); } } },
 
@@ -1372,7 +1416,7 @@ function update(dt){
 
   switch(p.state){
     case 'idle': p.think-=dt;
-      if(musicPlaying()){ p.danceT=(p.danceT||0)+dt; if(p.danceT>=0.48){ p.danceT=0; p.beat=(p.beat||0)+1; p.sy=0.9; if(p.beat%2===0) p.facing*=-1; if(p.beat%4===0) spawn({type:'note',x:p.cxD+rand(-8,8),y:p.bubY+2,vx:rand(-5,5),vy:-12,life:1.2}); if(R.pet==='lantern') p.angV+=p.facing*0.25; }
+      if(musicPlaying()||karaokeLive()){ p.danceT=(p.danceT||0)+dt; if(p.danceT>=0.48){ p.danceT=0; p.beat=(p.beat||0)+1; p.sy=0.9; if(p.beat%2===0) p.facing*=-1; if(p.beat%4===0) spawn({type:'note',x:p.cxD+rand(-8,8),y:p.bubY+2,vx:rand(-5,5),vy:-12,life:1.2}); if(R.pet==='lantern') p.angV+=p.facing*0.25; }
         p.musicAcc=(p.musicAcc||0)+dt; if(p.musicAcc>=60){ p.musicAcc=0; fx({joy:+0.5}); } if(p.think<=0) p.think=rand(3,6); break; }   // grooving instead of wandering
       if(p.think<=0) idleThink(); break;
     case 'walk': { const d=p.tx-p.x; if(Math.abs(d)<0.6){ p.x=p.tx; p.state='idle'; p.think=rand(2,5); const f=p.onArrive; p.onArrive=null; if(f) f(); }
@@ -1550,7 +1594,7 @@ function tapScene(pt,wasPet){
     hop(70); pet.flare=1; burst(pet.cxD,pet.sparkY,8,'ember'); setExpr(Math.random()<0.5?'happy':'wow',1.4); pet.lookUser=2;
     say(['heart','note','bang','sparkle'][Math.floor(rand(0,4))],1.5); st().joy=clamp(st().joy+1,0,100); addFP(0.5); sfx('tap'); return;
   }
-  for(const [prop,rect] of Object.entries(R.props)){ if(inRect(pt,rect)){ const id=RP(prop); const e=Home.get(id);
+  for(const [prop,rect] of Object.entries(R.props)){ if(inRect(pt,rect)){ if(prop==='karaoke'){ openKaraoke(); return; } const id=RP(prop); const e=Home.get(id);
     if(e){ if(dom(id)==='sensor'||dom(id)==='weather') toast(`${e.attributes.friendly_name}: ${stateText(e)}`); else toggleEntity(id); spawn({type:'ring',x:pt.x,y:pt.y,life:0.35}); } return; } }
   for(let i=bubbles.length-1;i>=0;i--){ const b=bubbles[i]; if(Math.hypot(pt.x-b.x,pt.y-b.y)<b.r+4){ popBubble(i,true); return; } }
   if(ball&&Math.hypot(pt.x-ball.x,pt.y-(ball.y-3))<9){ ball.vy=-95; ball.vx=rand(-25,25); sfx('boop'); return; }
@@ -1787,7 +1831,9 @@ async function netTick(){
     if(NET.leader){
       for(const a of await api(`/api/queue/next?id=${NET.id}`)) await runAction(a);
       if(Date.now()-NET.lastPush>2500){ NET.lastPush=Date.now(); S.last=Date.now(); await api('/api/state',{id:NET.id,full:S,summary:netSummary()}); }
-    } else if(Date.now()-NET.lastPull>2500){ NET.lastPull=Date.now(); const r=await api('/api/state?full=1'); adopt(r.full,r.pet&&r.pet.activity); }
+    }
+    if(Date.now()-KQ.lastPull>2000){ KQ.lastPull=Date.now(); await kPull(); }
+    if(!NET.leader&&Date.now()-NET.lastPull>2500){ NET.lastPull=Date.now(); const r=await api('/api/state?full=1'); adopt(r.full,r.pet&&r.pet.activity); }
   }catch(e){}
   NET.busy=false;
 }
@@ -1796,10 +1842,66 @@ function relay(action,extra){ if(isFollower()) api(`/api/pet/${action}`,{by:`${S
 async function netInit(){
   if(!location.protocol.startsWith('http')) return;
   try{ const r=await fetch('/api/ping',{cache:'no-store'}); if(!r.ok) return; await r.json(); }catch(e){ return; }
-  NET.on=true;
+  NET.on=true; KQ.lastId=undefined;
   try{ const r=await api('/api/state?full=1'); if(r.full&&(r.full.last||0)>(S.last||0)) adopt(r.full,r.pet&&r.pet.activity); }catch(e){}
   setInterval(netTick,1500); netTick();
 }
+
+/* =====================================================================
+   KARAOKE — a machine in the living room; tap it for the singer queue.
+   With the home server the queue lives on the Pi (shared by every screen
+   and phone, see /remote); without it, it's kept on this screen.
+   ===================================================================== */
+const KQ={state:{current:null,queue:[]},lastId:undefined,lastPull:0,qr:null};
+S.karaoke=S.karaoke||{current:null,queue:[]};
+const kState=()=>NET.on?KQ.state:S.karaoke;
+const karaokeLive=()=>!!kState().current;
+async function kOp(op,body={}){
+  if(NET.on){ try{ const r=await api(`/api/karaoke/${op}`,body); if(r.error){ toast(r.error); return r; } if(r.karaoke){ KQ.state=r.karaoke; kChanged(); } return r; }catch(e){ toast("Can't reach the karaoke queue"); return {}; } }
+  const k=S.karaoke;
+  if(op==='join'){ const name=(body.name||'').trim().slice(0,24); if(!name){ toast('Add a name first'); return {error:'name'}; }
+    k.queue.push({id:Math.random().toString(36).slice(2,10),name,song:(body.song||'').trim().slice(0,60),added:Date.now()/1000}); }
+  else if(op==='next'){ k.current=k.queue.shift()||null; if(k.current) k.current.started=Date.now()/1000; }
+  else if(op==='remove'){ k.queue=k.queue.filter(e=>e.id!==body.id); if(k.current&&k.current.id===body.id) k.current=null; }
+  else if(op==='clear'){ k.current=null; k.queue=[]; }
+  save(); kChanged(); return {ok:true};
+}
+async function kPull(){ try{ KQ.state=await api('/api/karaoke'); kChanged(); }catch(e){} }
+function kChanged(){
+  const c=kState().current, id=c?c.id:null;
+  if(KQ.lastId===undefined){ KQ.lastId=id; }                 // first look: don't announce
+  else if(id!==KQ.lastId){ KQ.lastId=id;
+    if(c){ toast(`Now singing: ${c.name}${c.song?' · '+c.song:''}`); sfx('yay'); uiWakeUntil=Date.now()+120000; if(!S.asleep){ say('note',2.5); setExpr('wow',1.5); hop(50); burst(pet.cxD,pet.sparkY,10,'ember'); } } }
+  if(!$('#karaoke').classList.contains('hidden')) renderKaraoke();
+}
+const esc=t=>String(t||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function renderKaraoke(){
+  const k=kState(), c=k.current;
+  $('#kNow').innerHTML=c?`<div class="kl">Now singing</div><div class="kn">${esc(c.name)}</div><div class="ks">${esc(c.song)||'&nbsp;'}</div>`
+    :`<div class="kl">${k.queue.length?'Ready when you are':'The stage is empty'}</div><div class="kn">${k.queue.length?esc(k.queue[0].name)+' is up first':'Add a name to start'}</div><div class="ks">&nbsp;</div>`;
+  $('#kNext').textContent=c?(k.queue.length?'Next singer':'Finish'):'Start';
+  $('#kNext').disabled=!c&&!k.queue.length;
+  $('#kQueue').innerHTML=k.queue.length?k.queue.map((e,i)=>`<div class="kq"><b>${i+1}</b><span>${esc(e.name)}<small>${esc(e.song)}</small></span><button data-rm="${e.id}" aria-label="Remove">X</button></div>`).join('')
+    :'<div class="kempty">No one in line yet.</div>';
+}
+async function openKaraoke(){
+  if(NET.on) await kPull();
+  renderKaraoke(); $('#karaoke').classList.remove('hidden'); sfx('ui');
+  const box=$('#kQR');
+  if(!NET.on){ box.innerHTML=''; $('#kURL').textContent='Type names here, or run ember_server.py so guests can join from their phones.'; return; }
+  try{ const info=await api('/api'); const url=CONFIG.remoteUrl||info.remote; $('#kURL').textContent=url.replace(/^https?:\/\//,'');
+    if(KQ.qr!==url){ box.innerHTML='';
+      if(!window.qrcode) await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='vendor/qrcode.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });   // bundled, works offline
+      const q=qrcode(0,'M'); q.addData(url); q.make(); const cell=Math.max(2,Math.floor(112/(q.getModuleCount()+4)));
+      box.innerHTML=q.createImgTag(cell,cell*2); const im=box.querySelector('img'); if(im){ im.style.imageRendering='pixelated'; im.style.width=im.style.height='112px'; } KQ.qr=url; } }
+  catch(e){ box.innerHTML=''; }
+}
+$('#kAdd').addEventListener('click',async()=>{ const r=await kOp('join',{name:$('#kName').value,song:$('#kSong').value,by:'Ember screen'});
+  if(r&&!r.error){ toast(`${$('#kName').value.trim()} is in line!`); $('#kName').value=''; $('#kSong').value=''; sfx('ui'); } });
+$('#kNext').addEventListener('click',()=>{ kOp('next'); sfx('ui'); });
+$('#kClear').addEventListener('click',e=>{ if(e.target.dataset.armed){ kOp('clear'); e.target.textContent='Clear'; delete e.target.dataset.armed; toast('Queue cleared'); return; }
+  e.target.dataset.armed=1; e.target.textContent='Sure?'; setTimeout(()=>{ e.target.textContent='Clear'; delete e.target.dataset.armed; },2500); });
+$('#kQueue').addEventListener('click',e=>{ const b=e.target.closest('[data-rm]'); if(b){ kOp('remove',{id:b.dataset.rm}); sfx('ui'); } });
 
 /* =====================================================================
    BOOT
@@ -1810,6 +1912,7 @@ setRoom(roomFromHash()||S.settings.room||'hearth');
 if(S.timer&&S.timer.mode==='focus'&&S.timer.act&&S.timer.act!=='nap'&&!S.asleep){ pet.state='cowork'; pet.coT=0; pet.coBeat=0; }
 scheduleMischief();
 netInit();
+kChanged();
 setInterval(()=>{ updateHUD(); updateTimer(); },1000);
 updateTimer();
 setInterval(save,10000);
