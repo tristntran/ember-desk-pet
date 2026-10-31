@@ -45,7 +45,7 @@ img.ico{image-rendering:pixelated;display:block}
 @keyframes fDn{0%,60%{box-shadow:0 0 0 2px #ff7a5a}100%{box-shadow:none}}
 .bar i.mid{background:var(--mid)} .bar i.bad{background:var(--bad)}
 
-#toast{position:absolute;left:50%;top:330px;transform:translate(-50%,8px);padding:7px 16px 11px;font-size:18px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;z-index:5}
+#toast{position:absolute;left:50%;top:68px;transform:translate(-50%,8px);padding:7px 16px 11px;font-size:18px;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;white-space:nowrap;z-index:5}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 
 /* bottom bar */
@@ -715,7 +715,7 @@ function buildHearth(season){
   r(62,13,8,7,'#7a4a22'); r(63,14,6,5,'#f4ecd8'); r(65,15,1,2,'#3a2210'); r(66,16,1,1,'#3a2210');
   r(98,15,5,5,'#7ab8a8'); r(98,14,5,1,'#5c3a1a'); r(99,16,1,3,'#cfeee6');
   // Mandoo's bed, cozy by the fire
-  for(let y=64;y<74;y++) for(let x=24;x<49;x++){ const dx=(x+.5-36.5)/12.5, dy=(y+.5-69.5)/4.6, dd=dx*dx+dy*dy; if(dd<=1) r(x,y,1,1, dd>0.55?((x+y)%3===0?'#7a2a2a':'#a83c3c'):(dd>0.42?'#6a2020':((x*3+y)%5===0?'#d8c0a0':'#e8d4b4'))); }
+  for(let y=62;y<76;y++) for(let x=18;x<57;x++){ const dx=(x+.5-37.5)/18.5, dy=(y+.5-69.5)/5.8, dd=dx*dx+dy*dy; if(dd<=1) r(x,y,1,1, dd>0.55?((x+y)%3===0?'#7a2a2a':'#a83c3c'):(dd>0.42?'#6a2020':((x*3+y)%5===0?'#d8c0a0':'#e8d4b4'))); }
   // seasonal centrepiece
   if(season==='fall'){ r(78,16,7,4,'#f08a2c'); r(79,15,5,1,'#f08a2c'); r(79,20,5,0,'#c4621a'); r(81,16,1,4,'#c4621a'); r(79,17,1,2,'#ffb35c'); r(81,13,1,2,'#5c3a1a'); r(82,13,2,1,'#4f8a2e');
     r(87,17,4,3,'#e8c040'); r(88,16,2,1,'#e8c040'); r(88,15,1,1,'#5c3a1a'); }
@@ -1795,17 +1795,18 @@ if(CONFIG.trains.enabled){ renderTrains(); refreshTrains(); setInterval(refreshT
    is a little disappointed when you put the fire out. She also eggs
    Ember on sometimes.
    ===================================================================== */
-const DOGC={w:'#fbfbff',s:'#e2deea',o:'#8e8a9c',k:'#1a1418',p:'#ff8fb0',bow:'#ff6fa0'};
-const BED={x:36,y:71};
+const DOGC={w:'#fdf9f2',s:'#ede3d3',e:'#e6d2b6',o:'#a89a88',k:'#1a1418',p:'#ff8fb0',bow:'#ff6fa0'};   // warm white, cream ears
+const BED={x:37,y:72};
 const dog={x:BED.x,y:BED.y,hop:0,hv:0,facing:1,pose:'sleep',state:'sleep',t:0,next:rand(25,60),tx:BED.x,zT:1,barkT:0,timer:0,spins:0,wag:false,chaos:false};
 const dogHere=()=>RID===CONFIG.dog.room;
 function blobFill(c,shapes,colFn,outline){
   let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for(const s of shapes){ x0=Math.min(x0,Math.floor(s.x-s.rx)); x1=Math.max(x1,Math.ceil(s.x+s.rx)); y0=Math.min(y0,Math.floor(s.y-s.ry)); y1=Math.max(y1,Math.ceil(s.y+s.ry)); }
-  const inn=(px,py)=>shapes.some(s=>((px+0.5-s.x)/s.rx)**2+((py+0.5-s.y)/s.ry)**2<=1);
+  x0-=1;y0-=1;x1+=1;y1+=1;
+  const inn=(px,py)=>shapes.some(s=>{ const dx=(px+0.5-s.x)/s.rx, dy=(py+0.5-s.y)/s.ry; const k=s.fl?1+s.fl*Math.sin(Math.atan2(dy,dx)*(s.n||9)+(s.seed||0)):1; return dx*dx+dy*dy<=k*k; });
   for(let py=y0;py<=y1;py++) for(let px=x0;px<=x1;px++){ if(!inn(px,py)) continue;
     c.fillStyle=(!inn(px-1,py)||!inn(px+1,py)||!inn(px,py-1)||!inn(px,py+1))?outline:colFn(px,py); c.fillRect(px,py,1,1); } }
 function dogBark(happy=true){ const d=dog; playSeq(happy?[[900,.05,'square'],[1250,.07,'square']]:[[700,.12,'triangle'],[560,.18,'triangle']]);
-  spawn({type:'bang',x:d.x+8*d.facing,y:d.y-17,vy:-8,life:0.6}); }
+  spawn({type:'bang',x:d.x+10*d.facing,y:d.y-21,vy:-8,life:0.6}); }
 function dogUpdate(dt){
   if(!dogHere()) return;
   const d=dog; d.t+=dt;
@@ -1817,7 +1818,7 @@ function dogUpdate(dt){
   d.chaos=chaos; d.wag=false;
   switch(d.state){
     case 'sleep': d.pose='sleep';
-      d.zT-=dt; if(d.zT<=0){ d.zT=2.4; spawn({type:'zz',x:d.x+7*d.facing,y:d.y-9,vx:3,vy:-5,life:2}); }
+      d.zT-=dt; if(d.zT<=0){ d.zT=2.4; spawn({type:'zz',x:d.x+5*d.facing+6,y:d.y-14,vx:3,vy:-5,life:2}); }
       d.next-=dt;
       if(fun){ d.state='watch'; d.timer=0; }
       else if(d.next<=0&&!isNight()){ d.state='stir'; d.timer=rand(2.5,4); d.facing=pet.cxD>d.x?1:-1;
@@ -1843,27 +1844,39 @@ function dogUpdate(dt){
 function drawDog(c,t){
   if(!dogHere()) return;
   const d=dog, f=d.facing, x=Math.round(d.x), y=Math.round(d.y+d.hop), g=Math.round(d.y);
-  c.fillStyle='rgba(0,0,0,.18)'; c.fillRect(x-8,g,16,1);
-  const X=v=>x+(f>0?v:-v-1), px=(v,yy,col)=>{ c.fillStyle=col; c.fillRect(X(v),yy,1,1); };
-  if(d.pose==='sleep'){ const br=Math.sin(t*1.5)*0.35;
-    blobFill(c,[{x:x+0.5-1*f,y:y-3.3,rx:8,ry:3.4+br},{x:x+0.5+5.5*f,y:y-3.8,rx:4,ry:3.1},{x:x+0.5+8.6*f,y:y-3.2,rx:1.9,ry:1.5},{x:x+0.5-6.5*f,y:y-5.6,rx:2.8,ry:1.5}],(qx,qy)=>qy>=y-2?DOGC.s:DOGC.w,DOGC.o);
-    for(let yy=y-6;yy<=y-2;yy++){ px(3,yy,DOGC.s); px(4,yy,DOGC.s); } px(3,y-1,DOGC.o);        // long floppy ear
-    px(6,y-4,DOGC.k); px(7,y-4,DOGC.k); px(10,y-3,DOGC.k);                                      // closed eye, nose
-    px(2,y-7,DOGC.bow); px(3,y-7,DOGC.bow);                                                      // tiny bow behind the ear
+  const P=(xx,yy,col)=>{ c.fillStyle=col; c.fillRect(xx,yy,1,1); };
+  const fur=(qx,qy,shadeBelow)=>qy>=shadeBelow?DOGC.s:(hash(qx*7,qy*3)>0.86?DOGC.s:DOGC.w);   // a little fur texture
+  c.fillStyle='rgba(0,0,0,.18)'; c.fillRect(x-11,g,22,1); c.fillRect(x-9,g+1,18,1);
+  if(d.pose==='sleep'){
+    // like the photo: lying flat, chin down on the cushion, facing you, big shaggy ears
+    const br=Math.sin(t*1.5)*0.4, hx=x+5*f;
+    blobFill(c,[{x:x-3*f,y:y-5,rx:11,ry:5+br,fl:0.07,n:11,seed:1}],(qx,qy)=>fur(qx,qy,y-3),DOGC.o);                       // body
+    blobFill(c,[{x:x-12*f,y:y-6,rx:3,ry:2.4,fl:0.12,n:7}],(qx,qy)=>fur(qx,qy,y-5),DOGC.o);                                  // tail tuft
+    blobFill(c,[{x:hx-4,y:y-3.5,rx:2.4,ry:1.4},{x:hx+5,y:y-3.5,rx:2.4,ry:1.4}],()=>DOGC.w,DOGC.o);                         // front paws
+    blobFill(c,[{x:hx+0.5,y:y-6.5,rx:5.8,ry:5,fl:0.08,n:12,seed:2}],(qx,qy)=>fur(qx,qy,y-3),DOGC.o);                       // head
+    blobFill(c,[{x:hx-4.6,y:y-4.6,rx:2.2,ry:4.4,fl:0.1,n:8},{x:hx+5.6,y:y-4.6,rx:2.2,ry:4.4,fl:0.1,n:8,seed:3}],(qx,qy)=>hash(qx,qy)>0.8?DOGC.s:DOGC.e,DOGC.o);   // floppy ears
+    P(hx-2,y-7,DOGC.k); P(hx-1,y-7,DOGC.k); P(hx+2,y-7,DOGC.k); P(hx+3,y-7,DOGC.k);                                       // sleepy closed eyes
+    P(hx-2,y-8,DOGC.s); P(hx+3,y-8,DOGC.s);                                                                                // shaggy brows
+    P(hx,y-5,DOGC.k); P(hx+1,y-5,DOGC.k); P(hx,y-4,DOGC.k);                                                                 // button nose
+    P(hx-3,y-11,DOGC.bow); P(hx-2,y-11,DOGC.bow); P(hx-1,y-11,DOGC.bow); P(hx-2,y-10,DOGC.bow);                            // little topknot bow
     return; }
-  const run=d.pose==='run', ph=Math.sin(t*(run?24:0)), up=run?Math.round(Math.abs(ph)):0;
-  for(const [lx,i] of [[-4,0],[-2,1],[2,0],[4,1]]){ const lift=run&&((i===0)===(ph>0))?1:0;
-    c.fillStyle=DOGC.o; c.fillRect(X(lx),y-3-up-lift,1,3); c.fillStyle=DOGC.s; c.fillRect(X(lx+1),y-3-up-lift,1,3); }
-  const wag=d.wag?Math.sin(t*26)*0.9:0, Y=y-up;
-  blobFill(c,[{x:x+0.5-0.5*f,y:Y-5,rx:6.8,ry:3.5},{x:x+0.5+5.5*f,y:Y-8.6,rx:4,ry:3.8},{x:x+0.5+9*f,y:Y-7.6,rx:1.9,ry:1.6},{x:x+0.5-5*f+wag,y:Y-8.2,rx:3,ry:1.7}],(qx,qy)=>qy>=Y-4?DOGC.s:DOGC.w,DOGC.o);
-  for(let yy=Y-10;yy<=Y-4;yy++){ px(3,yy,DOGC.s); px(4,yy,DOGC.s); } px(3,Y-3,DOGC.o); px(4,Y-3,DOGC.o);   // long silky ear
-  px(7,Y-10,'#ffffff'); px(7,Y-9,DOGC.k); px(8,Y-9,DOGC.k); px(11,Y-8,DOGC.k);                   // eye with shine, button nose
-  if(run){ px(10,Y-6,DOGC.p); }                                                                   // panting
-  px(2,Y-11,DOGC.bow); px(3,Y-11,DOGC.bow);                                                       // tiny bow behind the ear
+  const run=d.pose==='run', ph=Math.sin(t*(run?24:0)), up=run?Math.round(Math.abs(ph)):0, Y=y-up;
+  const X=v=>x+(f>0?v:-v-1);
+  for(const [lx,i] of [[-6,0],[-3,1],[3,0],[6,1]]){ const lift=run&&((i===0)===(ph>0))?1:0;                            // stubby legs, mostly fur
+    c.fillStyle=DOGC.o; c.fillRect(X(lx),y-3-lift-up,2,3); c.fillStyle=DOGC.s; c.fillRect(X(lx)+(f>0?0:1),y-3-lift-up,1,2); }
+  const wag=d.wag?Math.sin(t*26)*1.2:0, flap=run?Math.round(ph):0;
+  blobFill(c,[{x:x+0.5-1*f,y:Y-7,rx:9,ry:5,fl:0.07,n:12,seed:4}],(qx,qy)=>fur(qx,qy,Y-5),DOGC.o);                          // chunky fluffy body
+  blobFill(c,[{x:x+0.5-8*f+wag,y:Y-11,rx:3.6,ry:2.6,fl:0.14,n:7,seed:5}],(qx,qy)=>fur(qx,qy,Y-9),DOGC.o);                 // plume tail over the back
+  blobFill(c,[{x:x+0.5+6.5*f,y:Y-11.5,rx:5.4,ry:5,fl:0.08,n:12,seed:6},{x:x+0.5+10.6*f,y:Y-9.6,rx:2.4,ry:2,fl:0.1,n:6}],(qx,qy)=>fur(qx,qy,Y-8),DOGC.o);   // round head + muzzle
+  blobFill(c,[{x:x+0.5+4.2*f,y:Y-9.5-flap,rx:2.2,ry:4.4,fl:0.1,n:8,seed:7}],(qx,qy)=>hash(qx,qy)>0.8?DOGC.s:DOGC.e,DOGC.o);   // long floppy ear
+  P(X(8),Y-13,DOGC.k); P(X(9),Y-13,DOGC.k); P(X(8),Y-12,DOGC.k); P(X(9),Y-12,DOGC.k); P(X(8),Y-13,'#ffffff');           // big round eye
+  P(X(9),Y-14,DOGC.s); P(X(12),Y-10,DOGC.k); P(X(12),Y-9,DOGC.k);                                                         // brow fluff, nose
+  if(run||d.state==='watch'){ P(X(11),Y-7,DOGC.p); }                                                                     // happy tongue
+  P(X(4),Y-17,DOGC.bow); P(X(5),Y-17,DOGC.bow); P(X(6),Y-17,DOGC.bow); P(X(5),Y-16,DOGC.bow);                            // topknot bow
 }
 function tapDog(pt){
   if(!dogHere()) return false; const d=dog;
-  if(!(pt.x>=d.x-9&&pt.x<=d.x+9&&pt.y>=d.y-15&&pt.y<=d.y+2)) return false;
+  if(!(pt.x>=d.x-14&&pt.x<=d.x+14&&pt.y>=d.y-19&&pt.y<=d.y+2)) return false;
   for(let i=0;i<2;i++) spawn({type:'heart',x:d.x+rand(-4,4),y:d.y-12,vy:-14,life:1.1});
   if(d.state==='sleep'){ d.wag=true; playSeq([[300,.12,'triangle']]); toast(`${CONFIG.dog.name} is snoozing by the fire`); }
   else { if(d.hop===0) d.hv=-60; dogBark(); }
