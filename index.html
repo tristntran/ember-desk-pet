@@ -994,10 +994,10 @@ function startToy(id){
 /* How every action ripples into the other bars (per event).
    Playing burns fuel and energy and makes a mess; eating drops crumbs; tidying is a bit of a fuss. */
 const EFFECTS={
-  eatLog:      { fuel:+38, joy:+3, tidy:-8 },
-  eatSmall:    { fuel:+22, joy:+2, tidy:-5 },
-  tidy:        { tidy:+100, rest:-6, joy:-10, fuel:-6 },   // forced to clean its own room: tiring, boring, hungry work
-  sweeping:    { joy:-1.5, fuel:-1 },                     // per second while sweeping
+  eatLog:      { fuel:+38, joy:+3, tidy:-16 },   // messy eater: crumbs and ash everywhere
+  eatSmall:    { fuel:+22, joy:+2, tidy:-10 },
+  tidy:        { tidy:+100, rest:-6, joy:-18, fuel:-6 },   // forced to clean its own room: tiring, boring, hungry work
+  sweeping:    { joy:-2.5, fuel:-1 },                     // per second while sweeping
   grudge:      { joy:-8, rest:-3 },             // cleaned again too soon
   squirt:      { fuel:-4, joy:-5 },                 // water on a fire… not fun
   mischief:    { tidy:-2.5, joy:+0.6 },            // per second of misbehaving (he's having a blast)  // he does NOT like being swept
@@ -1444,7 +1444,8 @@ function update(dt){
       if(p.think<=0) idleThink(); break;
     case 'walk': { const d=p.tx-p.x; if(Math.abs(d)<0.6){ p.x=p.tx; p.state='idle'; p.think=rand(2,5); const f=p.onArrive; p.onArrive=null; if(f) f(); }
       else { p.facing=Math.sign(d); p.x+=Math.sign(d)*Math.min(Math.abs(d),p.speed*dt); p.walkT+=dt; } break; }
-    case 'eat': if(food&&food.landed){ p.actT-=dt; setExpr('eat',0.2); food.eaten=1-p.actT/2.2; if(Math.random()<dt*14) spawn({type:'ember',x:food.x+rand(-3,3),y:food.y-rand(1,4),vx:rand(-10,10),vy:rand(-30,-15),g:-5,life:rand(.5,1)});
+    case 'eat': if(food&&food.landed){ p.actT-=dt; setExpr('eat',0.2); food.eaten=1-p.actT/2.2;
+        if(Math.random()<dt*18) spawn({type:'dust',col:['#7a4a22','#b07a40','#8a8480'][Math.floor(rand(0,3))],x:food.x+rand(-3,3),y:food.y-rand(1,4),vx:rand(-30,30),vy:rand(-40,-15),g:140,life:rand(0.6,1),s:Math.random()<0.3?2:1});   // crumbs everywhere if(Math.random()<dt*14) spawn({type:'ember',x:food.x+rand(-3,3),y:food.y-rand(1,4),vx:rand(-10,10),vy:rand(-30,-15),g:-5,life:rand(.5,1)});
         if(Math.random()<dt*3) sfx('eat');
         if(p.actT<=0){ const gain=food.kind==='pinecone'?22:38; if(s.fuel<85) addFP(6); fx(food.kind==='pinecone'?EFFECTS.eatSmall:EFFECTS.eatLog); food=null; p.flare=1.4; p.state='idle'; p.think=2.5; setExpr('happy',2); burst(p.cxD,p.sparkY,10,'ember'); spawn({type:'heart',x:p.cxD,y:p.bubY,vy:-14,life:1.4}); hop(50); sfx('yay'); } }
       else if(!food){ p.state='idle'; } break;
@@ -1796,7 +1797,7 @@ if(CONFIG.trains.enabled){ renderTrains(); refreshTrains(); setInterval(refreshT
    Ember on sometimes.
    ===================================================================== */
 const DOGC={w:'#fdf9f2',s:'#ede3d3',e:'#e6d2b6',o:'#a89a88',k:'#1a1418',p:'#ff8fb0',bow:'#ff6fa0'};   // warm white, cream ears
-const BED={x:37,y:72};
+const BED={x:37,y:72}, BEG={x:52,y:71};
 const dog={x:BED.x,y:BED.y,hop:0,hv:0,facing:1,pose:'sleep',state:'sleep',t:0,next:rand(25,60),tx:BED.x,zT:1,barkT:0,timer:0,spins:0,wag:false,chaos:false};
 const dogHere=()=>RID===CONFIG.dog.room;
 function blobFill(c,shapes,colFn,outline){
@@ -1813,6 +1814,8 @@ function dogUpdate(dt){
   if(d.hop<0||d.hv<0){ d.hv+=320*dt; d.hop+=d.hv*dt; if(d.hop>=0){ d.hop=0; d.hv=0; } }
   const chaos=roomFires().length>0||pet.state==='mischief';
   const fun=!chaos&&(pet.state==='play'||karaokeLive());
+  const eating=!chaos&&pet.state==='eat'&&!!food;
+  if(eating&&!['gobeg','beg'].includes(d.state)){ d.state='gobeg'; if(d.pose==='sleep') d.hv=-60; dogBark(); }
   if(chaos&&d.state!=='zoom'){ d.state='zoom'; d.tx=rand(10,150); d.hv=-80; dogBark(); toast(`${CONFIG.dog.name} has the zoomies!`); }
   if(!chaos&&d.chaos){ toast(`${CONFIG.dog.name} looks disappointed the fun is over`); dogBark(false); }   // she wanted more chaos
   d.chaos=chaos; d.wag=false;
@@ -1836,6 +1839,14 @@ function dogUpdate(dt){
       if(Math.random()<dt*6) spawn({type:Math.random()<0.5?'heart':'note',x:d.x,y:d.y-16,vx:rand(-6,6),vy:-12,life:0.9});   // pure joy
       if(Math.random()<dt*14) spawn({type:'dust',col:'#c8b8a0',x:d.x-4*d.facing,y:d.y-1,vx:-d.facing*rand(8,18),vy:rand(-8,-2),g:20,life:0.4});
       if(!chaos) d.state='home'; break; }
+    case 'gobeg': { d.pose='run'; d.wag=true; const dd=BEG.x-d.x; d.y+=(BEG.y-d.y)*Math.min(1,dt*4);
+      if(Math.abs(dd)<1){ d.x=BEG.x; d.state='beg'; d.timer=0; } else { d.facing=Math.sign(dd); d.x+=Math.sign(dd)*Math.min(Math.abs(dd),48*dt); }
+      if(!eating&&!chaos) d.state='home'; break; }
+    case 'beg': d.pose='beg'; d.wag=true; d.facing=1;      // up on her back legs, clapping for a bite
+      if(Math.sin(d.t*12)>0&&!d.clapped){ d.clapped=true; playSeq([[2600,.015,'square']]); } else if(Math.sin(d.t*12)<=0) d.clapped=false;
+      if(Math.random()<dt*0.8) playSeq([[1100,.05,'square'],[1400,.06,'square']]);
+      if(!eating){ d.timer+=dt; if(d.timer>0.8){ playSeq([[700,.12,'triangle'],[560,.2,'triangle']]); toast(`${CONFIG.dog.name} didn't get any…`); d.state='home'; } }
+      break;
     case 'home': { d.pose='run'; const dd=BED.x-d.x; d.y+=(BED.y-d.y)*Math.min(1,dt*4);
       if(Math.abs(dd)<1){ d.x=BED.x; d.state='circle'; d.spins=3; d.timer=0.35; } else { d.facing=Math.sign(dd); d.x+=Math.sign(dd)*Math.min(Math.abs(dd),40*dt); } break; }
     case 'circle': d.pose='stand'; d.timer-=dt; if(d.timer<=0){ d.timer=0.35; d.facing*=-1; d.spins--; if(d.spins<=0){ d.state='sleep'; d.y=BED.y; d.next=rand(30,90); } } break;
@@ -1860,8 +1871,21 @@ function drawDog(c,t){
     P(hx,y-5,DOGC.k); P(hx+1,y-5,DOGC.k); P(hx,y-4,DOGC.k);                                                                 // button nose
     P(hx-3,y-11,DOGC.bow); P(hx-2,y-11,DOGC.bow); P(hx-1,y-11,DOGC.bow); P(hx-2,y-10,DOGC.bow);                            // little topknot bow
     return; }
-  const run=d.pose==='run', ph=Math.sin(t*(run?24:0)), up=run?Math.round(Math.abs(ph)):0, Y=y-up;
   const X=v=>x+(f>0?v:-v-1);
+  if(d.pose==='beg'){ const bob=Math.round(Math.abs(Math.sin(t*6))), Y=y-bob, clap=Math.sin(t*12)>0, wag=Math.sin(t*26)*1.2;
+    blobFill(c,[{x:x+0.5-5*f+wag,y:Y-4,rx:3.2,ry:2.4,fl:0.14,n:7,seed:5}],(qx,qy)=>fur(qx,qy,Y-3),DOGC.o);                 // wagging tail
+    blobFill(c,[{x:x-1.5,y:y-1.2,rx:2.4,ry:1.4},{x:x+2.5,y:y-1.2,rx:2.4,ry:1.4}],()=>DOGC.s,DOGC.o);                        // hind feet
+    blobFill(c,[{x:x+0.5,y:Y-8.5,rx:5,ry:7.2,fl:0.07,n:12,seed:8}],(qx,qy)=>fur(qx,qy,Y-4),DOGC.o);                          // upright fluffy body
+    blobFill(c,[{x:x+0.5+1.5*f,y:Y-17.5,rx:5.4,ry:4.9,fl:0.08,n:12,seed:6},{x:x+0.5+5.8*f,y:Y-15.8,rx:2.3,ry:1.9,fl:0.1,n:6}],(qx,qy)=>fur(qx,qy,Y-14),DOGC.o);   // head
+    blobFill(c,[{x:x+0.5-1.2*f,y:Y-15,rx:2.1,ry:4.4,fl:0.1,n:8,seed:7}],(qx,qy)=>hash(qx,qy)>0.8?DOGC.s:DOGC.e,DOGC.o);   // ear
+    P(X(3),Y-19,DOGC.k); P(X(4),Y-19,DOGC.k); P(X(3),Y-18,DOGC.k); P(X(4),Y-18,DOGC.k); P(X(3),Y-19,'#ffffff');            // big pleading eye
+    P(X(7),Y-17,DOGC.k); P(X(7),Y-16,DOGC.k); P(X(6),Y-14,DOGC.p);                                                         // nose, tongue
+    const py1=clap?Y-11:Y-13, py2=clap?Y-10:Y-8;                                                                            // paws: together, apart, together…
+    blobFill(c,[{x:x+0.5+5.6*f,y:py1,rx:2.3,ry:1.6},{x:x+0.5+6.2*f,y:py2,rx:2.3,ry:1.6}],()=>DOGC.w,DOGC.o);
+    if(clap) spawn({type:'sparkle',x:x+7*f,y:Y-13,life:0.12});   // *pat*
+    P(X(0),Y-23,DOGC.bow); P(X(1),Y-23,DOGC.bow); P(X(2),Y-23,DOGC.bow); P(X(1),Y-22,DOGC.bow);
+    return; }
+  const run=d.pose==='run', ph=Math.sin(t*(run?24:0)), up=run?Math.round(Math.abs(ph)):0, Y=y-up;
   for(const [lx,i] of [[-6,0],[-3,1],[3,0],[6,1]]){ const lift=run&&((i===0)===(ph>0))?1:0;                            // stubby legs, mostly fur
     c.fillStyle=DOGC.o; c.fillRect(X(lx),y-3-lift-up,2,3); c.fillStyle=DOGC.s; c.fillRect(X(lx)+(f>0?0:1),y-3-lift-up,1,2); }
   const wag=d.wag?Math.sin(t*26)*1.2:0, flap=run?Math.round(ph):0;
