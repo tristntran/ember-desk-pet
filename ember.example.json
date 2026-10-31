@@ -1,0 +1,152 @@
+{
+  "_readme": "Copy to ember.json on the Pi (it's git-ignored) and replace the entity_ids with yours from Home Assistant > Developer tools > States. See HOME_ASSISTANT.md.",
+  "home_assistant": {
+    "url": "http://homeassistant.local:8123",
+    "token": "PASTE_A_LONG_LIVED_ACCESS_TOKEN"
+  },
+  "poll_seconds": 2,
+  "trains": true,
+  "devices": [
+    {
+      "entity_id": "light.govee_living_room",
+      "name": "Living Room Lights",
+      "room": "Living"
+    },
+    {
+      "entity_id": "light.govee_kitchen",
+      "name": "Kitchen Lights",
+      "room": "Kitchen"
+    },
+    {
+      "entity_id": "light.govee_bedroom",
+      "name": "Bedroom Lamp",
+      "room": "Bedroom"
+    },
+    {
+      "entity_id": "light.govee_strip",
+      "name": "Light Strip",
+      "room": "Bedroom"
+    },
+    {
+      "entity_id": "light.govee_porch",
+      "name": "Porch Light",
+      "room": "Outside"
+    },
+    {
+      "entity_id": "media_player.projector",
+      "name": "Projector",
+      "room": "Living",
+      "_note": "IR through HAIR. If HAIR gave you buttons instead of a media player, list them under controls.",
+      "controls": [
+        {
+          "label": "Input",
+          "service": "button.press",
+          "entity": "button.projector_input"
+        }
+      ]
+    },
+    {
+      "entity_id": "media_player.living_room_apple_tv",
+      "name": "Apple TV",
+      "room": "Living",
+      "remote": "remote.living_room_apple_tv"
+    },
+    {
+      "entity_id": "media_player.edifier_speakers",
+      "name": "Speakers",
+      "room": "Living",
+      "_note": "Edifier R1700BT over IR through HAIR.",
+      "controls": [
+        {
+          "label": "Bluetooth",
+          "service": "button.press",
+          "entity": "button.edifier_bluetooth"
+        },
+        {
+          "label": "Line in",
+          "service": "button.press",
+          "entity": "button.edifier_line_in"
+        }
+      ]
+    },
+    {
+      "entity_id": "climate.lg_air_conditioner",
+      "name": "Air Conditioner",
+      "room": "Living"
+    },
+    {
+      "entity_id": "weather.forecast_home",
+      "name": "Weather",
+      "room": null
+    }
+  ],
+  "ember": {
+    "props": {
+      "climate": "climate.lg_air_conditioner",
+      "music": "media_player.living_room_apple_tv",
+      "weather": "weather.forecast_home"
+    },
+    "rooms": {
+      "hearth": {
+        "props": {
+          "lamp": "light.govee_living_room",
+          "lantern": "light.govee_kitchen",
+          "candle": "light.govee_bedroom",
+          "radio": "media_player.living_room_apple_tv"
+        },
+        "quick": [
+          "light.govee_living_room",
+          "media_player.projector"
+        ]
+      },
+      "bedroom": {
+        "props": {
+          "lamp": "light.govee_bedroom",
+          "fan": "climate.lg_air_conditioner",
+          "lights": "light.govee_strip"
+        },
+        "quick": [
+          "light.govee_bedroom",
+          "climate.lg_air_conditioner"
+        ]
+      },
+      "porch": {
+        "props": {
+          "switch": "light.govee_porch",
+          "porchLight": "light.govee_porch",
+          "thermo": "weather.forecast_home"
+        },
+        "quick": [
+          "light.govee_porch",
+          "media_player.living_room_apple_tv"
+        ]
+      }
+    },
+    "scenes": [
+      {
+        "key": "morning",
+        "name": "Morning",
+        "icon": "sun",
+        "entity": "scene.good_morning"
+      },
+      {
+        "key": "movie",
+        "name": "Movie",
+        "icon": "film",
+        "entity": "script.movie_night"
+      },
+      {
+        "key": "away",
+        "name": "Away",
+        "icon": "house",
+        "entity": "scene.away"
+      },
+      {
+        "key": "night",
+        "name": "Good Night",
+        "icon": "moon",
+        "entity": "scene.good_night"
+      }
+    ]
+  }
+}

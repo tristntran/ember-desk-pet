@@ -88,12 +88,14 @@ img.ico{image-rendering:pixelated;display:block}
 .scn{flex:1;height:46px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:16px;font-weight:600;background:var(--parch-l);border:3px solid var(--ink);box-shadow:inset 0 -5px 0 var(--parch-d)}
 .scn img{width:22px;height:22px;object-fit:contain}
 .scn:active,.tab:active,.tile:active{transform:translateY(2px)}
-.grid{flex:1;overflow-y:auto;touch-action:pan-y;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;align-content:start;padding:2px 4px 6px 2px}
+.grid{flex:1;overflow-y:auto;touch-action:pan-y;display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start;align-items:stretch;padding:2px 4px 6px 2px}
+.grid>*{width:calc(25% - 7.5px)}.grid>.tile.wide{width:calc(50% - 5px)}
 .grid::-webkit-scrollbar{width:10px}.grid::-webkit-scrollbar-thumb{background:var(--wood);border:2px solid var(--ink)}
 .tile{min-height:104px;background:var(--parch-l);border:3px solid var(--ink);box-shadow:inset 0 -6px 0 var(--parch-d);padding:9px 10px 12px;display:flex;flex-direction:column;gap:4px;position:relative}
 .tile.on{background:#ffe89a;box-shadow:inset 0 -6px 0 #f0c45a,0 0 12px rgba(255,200,80,.6)}
 .tile.ro{background:#efe2c2}
-.tile.wide{grid-column:span 2}
+.tile>*{flex-shrink:0}
+.tile.blk{display:block}.tile.blk .tctl{margin-top:8px}
 .tile .top{display:flex;align-items:center;gap:8px}
 .tile .top img{width:34px;height:34px;object-fit:contain;flex:none}
 .tname{font-size:16px;font-weight:600;line-height:1.1}
@@ -202,6 +204,13 @@ img.ico{image-rendering:pixelated;display:block}
 .kphone{display:flex;align-items:center;gap:12px;margin-top:auto;background:var(--parch-l);border:3px solid var(--ink);padding:8px}
 #kQR{width:112px;height:112px;flex:none}#kQR:empty{display:none}#kQR img,#kQR canvas{display:block}
 .kphone b{display:block;font-size:16px}.kphone span{font-size:13px;opacity:.75;word-break:break-all}
+.tchips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;align-items:center}
+.chipb{padding:4px 9px 6px;font-size:13px;background:var(--parch);border:2px solid var(--ink);box-shadow:inset 0 -3px 0 var(--parch-d)}
+.chipb.sel{background:var(--wood);color:#fff7e0;box-shadow:inset 0 -3px 0 var(--wood-d)}
+.tsep{width:2px;height:20px;background:var(--parch-d);margin:0 3px}
+.tsel{font-family:inherit;font-size:15px;height:40px;padding:0 6px;border:3px solid var(--ink);background:var(--parch);color:var(--ink);max-width:150px}
+.swatches{display:flex;gap:6px;margin-top:6px}
+.sw{width:26px;height:26px;border:3px solid var(--ink);padding:0;box-shadow:inset 0 -3px 0 rgba(0,0,0,.18)}
 #dimmer{position:absolute;inset:0;background:rgba(0,0,8,.55);pointer-events:none;opacity:0;transition:opacity 1.5s;z-index:30}
 #dimmer.on{opacity:1}
 </style>
@@ -353,15 +362,15 @@ const CONFIG = {
   // HA scene entity ids used by the scene buttons
   scenes: [
     { key:'morning', name:'Morning',    icon:'sun',   entity:'scene.good_morning' },
-    { key:'movie',   name:'Movie',      icon:'film',  entity:'scene.movie_time' },
+    { key:'movie',   name:'Movie',      icon:'film',  entity:'script.movie_night' },
     { key:'away',    name:'Away',       icon:'house', entity:'scene.away' },
     { key:'night',   name:'Good Night', icon:'moon',  entity:'scene.good_night' },
   ],
   // NYC subway arrivals (MTA GTFS-realtime, no key needed)
   trains: {
     enabled: true,
-    // 'auto' → uses the local relay (/mta/) when served by ember_server.py, otherwise asks MTA directly
-    feedBase: 'auto',
+    // 'auto' → uses the local relay (/mta/) when served by the Ember server, otherwise asks MTA directly
+    feedBase: 'auto',   // with the Pi server: its /mta/ relay (the server's only internet use; "trains": false in ember.json turns it off)
     refreshSec: 30,
     stations: [
       { route:'L', color:'#A7A9AC', feed:'gtfs-l',  stop:'L13', name:'Montrose Av', walk:6,
@@ -374,33 +383,39 @@ const CONFIG = {
   },
   // shared: thermostat heating makes the flame bigger; weather drives the window view
   dog: { name:'Mandoo', room:'hearth', window:'porch' },   // the family Maltese (sleeps by the hearth, peeks out the porch window)
-  props: { climate:'climate.ac', music:'media_player.living_room', weather:'weather.home' },
+  props: { climate:'climate.lg_air_conditioner', music:'media_player.living_room_apple_tv', weather:'weather.forecast_home' },
   // Rooms. Pick one per screen with a URL hash: …/index.html#hearth, #bedroom or #porch
   // props = which entity each tappable thing in that room mirrors; quick = bottom-bar chips
   // trains = show the subway board here; homeTab = which tab the Home panel opens on
   rooms: {
-    hearth:  { trains:false, homeTab:'Living', props:{ lamp:'light.living_room', lantern:'light.kitchen', candle:'light.bedroom', radio:'media_player.living_room' },
-               quick:['light.living_room','media_player.living_room'] },
-    bedroom: { trains:false, homeTab:'Bedroom', props:{ lamp:'light.bedroom', fan:'climate.ac', lights:'light.fairy_lights' },
-               quick:['light.bedroom','climate.ac'] },
-    porch:   { trains:true, homeTab:'Outside', props:{ switch:'light.porch', porchLight:'light.porch', thermo:'weather.home' },
-               quick:['light.porch','media_player.living_room'] },
+    hearth:  { trains:false, homeTab:'Living', props:{ lamp:'light.govee_living_room', lantern:'light.govee_kitchen', candle:'light.govee_bedroom', radio:'media_player.living_room_apple_tv' },
+               quick:['light.govee_living_room','media_player.projector'] },
+    bedroom: { trains:false, homeTab:'Bedroom', props:{ lamp:'light.govee_bedroom', fan:'climate.lg_air_conditioner', lights:'light.govee_strip' },
+               quick:['light.govee_bedroom','climate.lg_air_conditioner'] },
+    porch:   { trains:true, homeTab:'Outside', props:{ switch:'light.govee_porch', porchLight:'light.govee_porch', thermo:'weather.forecast_home' },
+               quick:['light.govee_porch','media_player.living_room_apple_tv'] },
   },
 };
 
 // Private, per-device overrides live in config.local.js (git-ignored), e.g. your HA token.
-(function merge(dst,src){ for(const k in src||{}){ if(src[k]&&typeof src[k]==='object'&&!Array.isArray(src[k])&&dst[k]) merge(dst[k],src[k]); else dst[k]=src[k]; } })(CONFIG, window.EMBER_LOCAL);
+function deepMerge(dst,src){ for(const k in src||{}){ if(src[k]&&typeof src[k]==='object'&&!Array.isArray(src[k])&&dst[k]) deepMerge(dst[k],src[k]); else dst[k]=src[k]; } return dst; }
+deepMerge(CONFIG, window.EMBER_LOCAL);
 
 // Entities shown in the panel. Keep entity_ids matching your HA install.
+// Demo devices (used when the Pi isn't connected to Home Assistant). With the server, your real
+// devices come from ember.json instead. supported_features follows Home Assistant's media_player bits.
 const ENTITIES = [
-  { entity_id:'light.living_room', room:'Living',  icon:'bulb',  state:'on',  attributes:{ friendly_name:'Living Room Lamp', brightness:204 } },
-  { entity_id:'light.kitchen',     room:'Kitchen', icon:'bulb',  state:'off', attributes:{ friendly_name:'Kitchen Light', brightness:255 } },
-  { entity_id:'light.bedroom',     room:'Bedroom', icon:'bulb',  state:'off', attributes:{ friendly_name:'Bedroom Lamp', brightness:140 } },
-  { entity_id:'light.fairy_lights',room:'Bedroom', icon:'bulb',  state:'on',  attributes:{ friendly_name:'Fairy Lights', brightness:255 } },
-  { entity_id:'light.porch',       room:'Outside', icon:'bulb',  state:'off', attributes:{ friendly_name:'Porch Light', brightness:255 } },
-  { entity_id:'climate.ac',        room:'Living',  icon:'snow',  state:'off', attributes:{ friendly_name:'Air Conditioner', temperature:72, current_temperature:71, hvac_action:'off', hvac_modes:['off','cool'] } },
-  { entity_id:'media_player.living_room', room:'Living', icon:'note', state:'paused', attributes:{ friendly_name:'Music', media_title:'Cozy Lo-fi Mix', media_artist:'Living Room Speaker', volume_level:0.35 } },
-  { entity_id:'weather.home',      room:null,      icon:'sun',   state:'sunny', attributes:{ friendly_name:'Weather', temperature:54 } },
+  { entity_id:'light.govee_living_room', room:'Living',  state:'on',  attributes:{ friendly_name:'Living Room Lights', brightness:204, rgb_color:[255,176,96], supported_color_modes:['hs','color_temp'] } },
+  { entity_id:'light.govee_kitchen',     room:'Kitchen', state:'off', attributes:{ friendly_name:'Kitchen Lights', brightness:255, rgb_color:[255,214,170], supported_color_modes:['hs','color_temp'] } },
+  { entity_id:'light.govee_bedroom',     room:'Bedroom', state:'off', attributes:{ friendly_name:'Bedroom Lamp', brightness:140, rgb_color:[255,190,120], supported_color_modes:['hs','color_temp'] } },
+  { entity_id:'light.govee_strip',       room:'Bedroom', state:'on',  attributes:{ friendly_name:'Light Strip', brightness:180, rgb_color:[170,90,255], supported_color_modes:['hs'] } },
+  { entity_id:'light.govee_porch',       room:'Outside', state:'off', attributes:{ friendly_name:'Porch Light', brightness:255, rgb_color:[255,214,150], supported_color_modes:['hs','color_temp'] } },
+  { entity_id:'media_player.projector',  room:'Living',  icon:'projector', state:'off', attributes:{ friendly_name:'Projector', source:'HDMI 1', source_list:['HDMI 1','HDMI 2'], supported_features:2432 } },
+  { entity_id:'media_player.living_room_apple_tv', room:'Living', icon:'tv', remote:'remote.living_room_apple_tv', state:'paused',
+    attributes:{ friendly_name:'Apple TV', app_name:'Music', media_title:'Cozy Lo-fi Mix', media_artist:'Lo-fi Beats', source:'Music', source_list:['Music','Netflix','YouTube','Disney+','Plex'], supported_features:18865 } },
+  { entity_id:'media_player.edifier_speakers', room:'Living', icon:'speaker', state:'on', attributes:{ friendly_name:'Speakers', source:'Bluetooth', source_list:['Bluetooth','Line 1','Line 2'], is_volume_muted:false, supported_features:3464 } },
+  { entity_id:'climate.lg_air_conditioner', room:'Living', state:'off', attributes:{ friendly_name:'Air Conditioner', temperature:72, current_temperature:71, hvac_action:'off', hvac_modes:['off','cool','dry','fan_only','auto'], fan_modes:['low','mid','high','auto'], fan_mode:'auto' } },
+  { entity_id:'weather.forecast_home',   room:null, state:'sunny', attributes:{ friendly_name:'Weather', temperature:54 } },
 ];
 
 /* =====================================================================
@@ -450,6 +465,9 @@ book:[".kkk.kkk.","kwwwkwwwk","kwSwkwSwk","kwwwkwwwk","kkkkkkkkk"],
 dumbbell:["kk.....kk","kSkkkkkSk","kSkkkkkSk","kk.....kk"],
 guitar:[".......kk","......kNk",".....kNk.",".kkkkNk..","knnnnk...","knnknk...","knnnnk...",".kkkk...."],
 pepper:["....Gk..","...kGk..","..kkkk..",".krrRk..",".krrrRk.","krrrrRk.","krrrRk..",".kRRk...","..kk...."],
+tv:["kkkkkkkkk","kbbbbbbbk","kbcbbbbbk","kbbbbbbbk","kbbbbbbbk","kkkkkkkkk","...kkk...",".kkkkkkk."],
+speaker:["kkkkkkk","kSSSSSk","kSkkkSk","kSkSkSk","kSkkkSk","kSSSSSk","kSkkkSk","kSkSkSk","kkkkkkk"],
+projector:[".........","kkkkkkk..","kSSSSSkyy","kSkkSSkyy","kSkkSSk..","kkkkkkk..",".k...k..."],
 grr:["..kkkkk..",".kSSSSSk.","kSSkSkSSk","kSSSSSSSk",".kkkkkkk.","...kyk...","..kyk....","...k....."],
 film:["kkkkkkkkk","kwkwkwkwk","kkkkkkkkk","kSSSSSSSk","kSSSSSSSk","kkkkkkkkk","kwkwkwkwk","kkkkkkkkk"],
 };
@@ -492,7 +510,7 @@ S.settings=Object.assign(fresh().settings,S.settings||{});
   if(S.asleep){ st.rest=clamp(st.rest+mins*4,0,100); st.fuel=clamp(st.fuel-mins*0.3,0,100); }
   else { st.fuel=clamp(st.fuel-mins*0.35,0,100); st.joy=clamp(st.joy-mins*0.4,0,100); st.rest=clamp(st.rest-mins*0.25,0,100); }
   st.tidy=clamp(st.tidy-mins*0.15,0,100); })();
-function save(){ S.last=Date.now(); if(!CONFIG.ha.enabled) S.ents=Object.values(Home.ents).map(e=>({entity_id:e.entity_id,state:e.state,attributes:e.attributes}));
+function save(){ S.last=Date.now(); if(!CONFIG.ha.enabled&&!(typeof NET!=='undefined'&&NET.ha)) S.ents=Object.values(Home.ents).map(e=>({entity_id:e.entity_id,state:e.state,attributes:e.attributes}));
   try{ localStorage.setItem(SAVE_KEY,JSON.stringify(S)); }catch(e){} }
 
 /* =====================================================================
@@ -509,22 +527,35 @@ const Home={ ents:{}, subs:[],
 Home.init(ENTITIES);
 if(!CONFIG.ha.enabled && S.ents) S.ents.forEach(s=>{ const e=Home.ents[s.entity_id]; if(e){ e.state=s.state; Object.assign(e.attributes,s.attributes); } });
 // mock weather follows the season until HA provides it
-if(!CONFIG.ha.enabled){ const se=seasonNow(); Home.ents['weather.home'].state = se==='winter'?'snowy':(new Date().getDate()%5===0?'rainy':'sunny'); }
+if(!CONFIG.ha.enabled){ const se=seasonNow(); Home.ents['weather.forecast_home'].state = se==='winter'?'snowy':(new Date().getDate()%5===0?'rainy':'sunny'); }
 
 const MOCK_SCENES={
-  'scene.good_morning':[['light','turn_on','light.kitchen'],['light','turn_on','light.living_room',{brightness_pct:70}],['media_player','media_play','media_player.living_room']],
-  'scene.movie_time':[['light','turn_on','light.living_room',{brightness_pct:20}],['light','turn_off','light.kitchen'],['media_player','media_pause','media_player.living_room']],
-  'scene.away':[['light','turn_off',['light.living_room','light.kitchen','light.bedroom','light.fairy_lights']],['media_player','media_pause','media_player.living_room'],['climate','turn_off','climate.ac']],
-  'scene.good_night':[['light','turn_off',['light.living_room','light.kitchen','light.bedroom','light.fairy_lights']],['light','turn_on','light.porch',{brightness_pct:40}],['media_player','media_pause','media_player.living_room']],
+  'scene.good_morning':[['light','turn_on','light.govee_kitchen'],['light','turn_on','light.govee_living_room',{brightness_pct:70,color_temp_kelvin:3000}],['media_player','media_play','media_player.living_room_apple_tv']],
+  'script.movie_night':[['media_player','turn_on','media_player.projector'],['remote','send_command','remote.living_room_apple_tv',{command:'wakeup'}],['media_player','turn_on','media_player.edifier_speakers'],
+    ['media_player','select_source','media_player.edifier_speakers',{source:'Line 1'}],['light','turn_on','light.govee_living_room',{brightness_pct:15,rgb_color:[120,60,255]}],['light','turn_off','light.govee_kitchen']],
+  'scene.away':[['light','turn_off',['light.govee_living_room','light.govee_kitchen','light.govee_bedroom','light.govee_strip']],['media_player','turn_off',['media_player.projector','media_player.edifier_speakers']],
+    ['remote','send_command','remote.living_room_apple_tv',{command:'suspend'}],['climate','turn_off','climate.lg_air_conditioner']],
+  'scene.good_night':[['light','turn_off',['light.govee_living_room','light.govee_kitchen','light.govee_bedroom','light.govee_strip']],['light','turn_on','light.govee_porch',{brightness_pct:40}],
+    ['media_player','turn_off',['media_player.projector','media_player.edifier_speakers']],['remote','send_command','remote.living_room_apple_tv',{command:'suspend'}]],
 };
 const DEMO_TRACKS=['Cozy Lo-fi Mix','Rainy Day Jazz','Morning Acoustic','Focus Beats','Late Night Piano'];
 const MockBackend={
   async callService(domain,service,data={}){
     const ids=[].concat(data.entity_id||[]);
-    for(const id of ids){ const e=Home.get(id), a=e?e.attributes:{};
+    for(const id of ids){ const e=Home.get(id)||{}, a=e.attributes||{};
       switch(domain+'.'+service){
-        case 'light.turn_on':{ const at={}; if(data.brightness_pct!=null) at.brightness=Math.round(data.brightness_pct*2.55); Home.set(id,'on',at); break; }
+        case 'light.turn_on':{ const at={}; if(data.brightness_pct!=null) at.brightness=Math.round(data.brightness_pct*2.55); if(data.rgb_color) at.rgb_color=data.rgb_color;
+          if(data.color_temp_kelvin) at.rgb_color=kelvinRGB(data.color_temp_kelvin); Home.set(id,'on',at); break; }
         case 'light.turn_off': Home.set(id,'off'); break;
+        case 'light.toggle': Home.set(id,e.state==='on'?'off':'on'); break;
+        case 'climate.set_fan_mode': Home.set(id,null,{fan_mode:data.fan_mode}); break;
+        case 'media_player.turn_on': Home.set(id,a.supported_features&1?'paused':'on'); break;
+        case 'media_player.toggle': Home.set(id,['off','standby'].includes(e.state)?(a.supported_features&1?'paused':'on'):'off'); break;
+        case 'media_player.volume_up': case 'media_player.volume_down': Home.set(id,null,{volume_level:clamp((a.volume_level??0.4)+(service.endsWith('up')?0.05:-0.05),0,1)}); toast(`${a.friendly_name}: volume ${service.endsWith('up')?'up':'down'}`); break;
+        case 'media_player.volume_mute': Home.set(id,null,{is_volume_muted:!!data.is_volume_muted}); break;
+        case 'media_player.select_source': Home.set(id,e.state==='off'?'on':null,{source:data.source,...(e.remote?{app_name:data.source,media_title:data.source}:{})}); break;
+        case 'remote.send_command': { const mp=Object.values(Home.ents).find(x=>x.remote===id); if(mp) Home.set(mp.entity_id,[].concat(data.command)[0]==='suspend'?'off':'paused'); break; }
+        case 'button.press': toast(`${a.friendly_name||id}: pressed`); break;
         case 'climate.turn_on': Home.set(id,'cool'); mockHvac(); break;
         case 'climate.turn_off': Home.set(id,'off'); mockHvac(); break;
         case 'climate.set_hvac_mode': Home.set(id,data.hvac_mode); mockHvac(); break;
@@ -536,14 +567,16 @@ const MockBackend={
         case 'media_player.media_next_track': case 'media_player.media_previous_track': { const i=DEMO_TRACKS.indexOf(a.media_title), n=DEMO_TRACKS.length;
           Home.set(id,'playing',{media_title:DEMO_TRACKS[(i+(service.includes('next')?1:n-1))%n]}); break; }
         case 'media_player.volume_set': Home.set(id,null,{volume_level:clamp(+data.volume_level,0,1)}); break;
-        case 'scene.turn_on': (MOCK_SCENES[id]||[]).forEach(([d,sv,eid,extra])=>this.callService(d,sv,{entity_id:eid,...(extra||{})})); break;
+        case 'script.turn_on': case 'scene.turn_on': (MOCK_SCENES[id]||[]).forEach(([d,sv,eid,extra])=>this.callService(d,sv,{entity_id:eid,...(extra||{})})); break;
       }
     }
     return {success:true};
   }
 };
 function mockHvac(){ const e=Home.get(CONFIG.props.climate); if(!e) return; const a=e.attributes; const d=a.current_temperature-a.temperature;
-  Home.set(e.entity_id,null,{hvac_action: e.state==='off'?'off':(e.state==='cool'&&d>0.4?'cooling':(e.state==='heat'&&d<-0.4?'heating':'idle'))}); }
+  Home.set(e.entity_id,null,{hvac_action: e.state==='off'?'off':(['cool','auto'].includes(e.state)&&d>0.4?'cooling':(e.state==='dry'?'drying':(e.state==='fan_only'?'fan':(e.state==='heat'&&d<-0.4?'heating':'idle'))))}); }
+function kelvinRGB(k){ const t=clamp((k-2200)/(6500-2200),0,1); return [255,Math.round(170+80*t),Math.round(90+160*t)]; }
+function lightRGB(id,fallback='255,215,140'){ const e=Home.get(id), c=e&&e.attributes.rgb_color; return c?c.join(','):fallback; }
 const musicPlaying=()=>{ const e=Home.get(CONFIG.props.music); return !!e&&e.state==='playing'; };
 function climateBoost(){ const e=Home.get(CONFIG.props.climate); const h=e&&e.attributes.hvac_action; return h==='heating'?1:(h==='cooling'?-1:0); }
 
@@ -576,33 +609,47 @@ function createHABackend({url,token}){
     return send({type:'call_service',domain,service,service_data:rest,target:entity_id?{entity_id}:undefined}); } };
 }
 function setConn(text,ok){ const el=$('#conn'); if(el){ el.textContent=text; el.classList.toggle('ok',!!ok); } }
-const backend = CONFIG.ha.enabled ? createHABackend(CONFIG.ha) : MockBackend;
+let backend = CONFIG.ha.enabled ? createHABackend(CONFIG.ha) : MockBackend;
+// When the Pi is connected to Home Assistant, everything goes through it (the token stays on the Pi).
+const ServerBackend={ async callService(domain,service,data={}){
+  try{ const r=await fetch('/api/ha/call',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({domain,service,data})}); const j=await r.json();
+    if(!r.ok){ toast(j.error||'Home Assistant error'); return null; } NET.haPull=0; return j; }catch(e){ toast("Can't reach the Pi"); return null; } } };
 if(!CONFIG.ha.enabled) setConn('Demo mode',false);
 
 const dom=id=>id.split('.')[0];
 
-function isActive(e){ if(!e) return false; const d=dom(e.entity_id); if(d==='climate') return e.state!=='off'; if(d==='media_player') return e.state==='playing'; return e.state==='on'||e.state==='open'; }
+const MP={PAUSE:1,VOLUME_SET:4,MUTE:8,PREV:16,NEXT:32,TURN_ON:128,TURN_OFF:256,VOLUME_STEP:1024,SOURCE:2048,PLAY:16384};
+const mpHas=(e,f)=>((e.attributes.supported_features||0)&f)!==0;
+const mpOff=e=>['off','standby','unavailable','unknown'].includes(e.state);
+function isActive(e){ if(!e) return false; const d=dom(e.entity_id); if(d==='climate') return e.state!=='off'&&e.state!=='unavailable'; if(d==='media_player') return e.state==='playing'||e.state==='on'; return e.state==='on'||e.state==='open'; }
+function mpPower(e,turnOn){ if(e.remote) return Home.call('remote','send_command',{entity_id:e.remote,command:turnOn?'wakeup':'suspend'});
+  return Home.call('media_player',turnOn?'turn_on':'turn_off',{entity_id:e.entity_id}); }
 function toggleEntity(id){
   const e=Home.get(id); if(!e) return; const d=dom(id);
   if(d==='light'||d==='switch'||d==='fan') return Home.call(d,e.state==='on'?'turn_off':'turn_on',{entity_id:id});
   if(d==='climate') return Home.call('climate',e.state==='off'?'turn_on':'turn_off',{entity_id:id});
-  if(d==='media_player') return Home.call('media_player','media_play_pause',{entity_id:id});
+  if(d==='media_player'){ if(!mpOff(e)&&(mpHas(e,MP.PAUSE)||mpHas(e,MP.PLAY))) return Home.call('media_player','media_play_pause',{entity_id:id}); return mpPower(e,mpOff(e)); }
+  if(d==='button') return Home.call('button','press',{entity_id:id});
 }
+const HVAC={cool:'Cooling',dry:'Dry',fan_only:'Fan',auto:'Auto',heat:'Heat',heat_cool:'Auto'};
 function stateText(e){ const d=dom(e.entity_id), a=e.attributes;
   if(d==='light') return e.state==='on'?`On · ${Math.round((a.brightness??255)/2.55)}%`:'Off';
   if(d==='sensor') return `${e.state}${a.unit_of_measurement||''}`;
   if(d==='weather') return `${Math.round(a.temperature??+e.state)}° outside`;
-  if(d==='climate') return e.state==='off'?`Off · ${Math.round(a.current_temperature)}° now`:`${a.hvac_action==='cooling'?'Cooling':'On'} to ${a.temperature}° · ${Math.round(a.current_temperature)}° now`;
-  if(d==='media_player') return e.state==='playing'?`Playing · ${a.media_title||''}`:(e.state==='off'?'Off':`Paused · ${a.media_title||''}`);
+  if(d==='climate') return e.state==='off'?`Off · ${Math.round(a.current_temperature)}° now`:`${HVAC[e.state]||e.state} · set ${a.temperature}° · ${Math.round(a.current_temperature)}° now`;
+  if(d==='media_player'){ if(mpOff(e)) return 'Off'; const what=a.media_title||a.app_name||a.source||'';
+    if(e.state==='playing') return `Playing · ${what}`; if(e.state==='paused') return `Paused · ${what}`;
+    return `On${a.source?' · '+a.source:''}${a.is_volume_muted?' · muted':''}`; }
+  if(d==='button') return 'Tap to press';
   return e.state==='on'?'On':'Off'; }
 function shortState(e){ const d=dom(e.entity_id), a=e.attributes;
-  if(d==='media_player') return e.state==='playing'?'Playing':'Paused';
-  if(d==='climate') return e.state==='off'?'Off':`Cool · ${a.temperature}°`;
+  if(d==='media_player') return mpOff(e)?'Off':(e.state==='playing'?'Playing':(e.state==='paused'?'Paused':'On'));
+  if(d==='climate') return e.state==='off'?'Off':`${HVAC[e.state]||e.state} · ${a.temperature}°`;
   return stateText(e); }
 function iconFor(e){ const d=dom(e.entity_id);
   if(d==='light') return e.state==='on'?'bulb':'bulboff';
   if(d==='climate') return 'snow';
-  if(d==='media_player') return 'note';
+  if(d==='media_player') return e.icon||(/project/i.test(e.attributes.friendly_name||'')?'projector':/speaker|edifier|sound/i.test(e.attributes.friendly_name||'')?'speaker':'tv');
   return e.icon||'plug'; }
 
 /* =====================================================================
@@ -822,8 +869,8 @@ const ROOMS={
     dyn(c){ curtains(c,5,43,11,43,!on2(RP('curtains')),30,'#b8433a','#8e2e28'); drawShade(c,false); c.fillStyle='#6a7080'; c.fillRect(148,20,5,6); },
     lit(c,t,tintA,flick){ const lamp=RP('lamp'),lan=RP('lantern'),cnd=RP('candle');
       c.globalCompositeOperation='lighter';
-      if(on(lamp)) glow(131,40,34*(0.6+0.4*bri(lamp)),`rgba(255,215,140,${(0.08+0.32*tintA)*bri(lamp)})`);
-      if(on(lan)) glow(150,23,26*(0.6+0.4*bri(lan)),`rgba(255,200,110,${(0.08+0.3*tintA)*bri(lan)})`);
+      if(on(lamp)) glow(131,40,34*(0.6+0.4*bri(lamp)),`rgba(${lightRGB(lamp)},${(0.08+0.32*tintA)*bri(lamp)})`);
+      if(on(lan)) glow(150,23,26*(0.6+0.4*bri(lan)),`rgba(${lightRGB(lan,'255,200,110')},${(0.08+0.3*tintA)*bri(lan)})`);
       if(on(cnd)) glow(54,12,12*flick,`rgba(255,190,90,${0.12+0.3*tintA})`);
       c.globalCompositeOperation='source-over';
       if(on(lamp)) drawShade(c,true);
@@ -851,8 +898,8 @@ const ROOMS={
       for(let x=100;x<158;x+=6){ c.fillStyle='#7a7a7a'; c.fillRect(x,21+Math.round(Math.sin((x-98)/60*Math.PI)*5),1,2); } },
     lit(c,t,tintA){ const lamp=RP('lamp'), lights=RP('lights');
       c.globalCompositeOperation='lighter';
-      if(on(lamp)) glow(27,27,36*(0.6+0.4*bri(lamp)),`rgba(255,215,140,${(0.1+0.32*tintA)*bri(lamp)})`);
-      if(on(lights)) glow(128,24,40,`rgba(255,200,150,${0.05+0.2*tintA})`);
+      if(on(lamp)) glow(27,27,36*(0.6+0.4*bri(lamp)),`rgba(${lightRGB(lamp)},${(0.1+0.32*tintA)*bri(lamp)})`);
+      if(on(lights)) glow(128,24,40,`rgba(${lightRGB(lights,'255,200,150')},${0.05+0.2*tintA})`);
       c.globalCompositeOperation='source-over';
       if(on(lamp)) for(let i=0;i<8;i++){ c.fillStyle=i%2?'#fff4c0':'#ffe08a'; c.fillRect(27-3-Math.floor(i/2),20+i,6+Math.floor(i/2)*2,1); }
       if(on(lights)){ const cols=['#ffd84a','#ff9fb2','#a8e0ff','#b8f0a0']; let k=0; for(let x=100;x<158;x+=6,k++){ const y=21+Math.round(Math.sin((x-98)/60*Math.PI)*5); c.globalAlpha=0.6+0.4*Math.sin(t*3+k*1.3); c.fillStyle=cols[k%4]; c.fillRect(x,y,1,2); } c.globalAlpha=1; } } },
@@ -867,7 +914,7 @@ const ROOMS={
       if(!locked){ c.fillStyle='#1e2a22'; c.fillRect(51,22,1,33); }
       const sw=on(RP('porchLight')); c.fillStyle='#c8c0b0'; c.fillRect(58,sw?33:35,2,2);
       const te=Home.get(RP('thermo')); const tv=te?+(te.attributes.temperature??te.state):40; const lvl=Math.round(clamp(tv/100,0,1)*9); c.fillStyle='#e0453a'; c.fillRect(81,31-lvl,2,lvl); },
-    lit(c,t,tintA){ const lv=Home.get('light.living_room');
+    lit(c,t,tintA){ const lv=Home.get(CONFIG.rooms.hearth.props.lamp);
       if(lv&&lv.state==='on'){ c.globalCompositeOperation='lighter'; glow(43,28,14,`rgba(255,210,130,${0.1+0.3*tintA})`); c.globalCompositeOperation='source-over';
         c.fillStyle='#ffd98a'; c.fillRect(36,24,4,9); c.fillRect(41,24,4,9); c.fillRect(46,24,4,9);
         c.globalCompositeOperation='lighter'; glow(17,23,18,`rgba(255,200,120,${0.06+0.3*tintA})`); c.fillStyle=`rgba(255,190,110,${0.25*tintA})`; c.fillRect(6,17,22,13); c.globalCompositeOperation='source-over'; } } },
@@ -909,7 +956,7 @@ function drawOutside(c,V,h,wx,season,t){
   c.fillStyle='#6a4020'; c.fillRect(tx-1,ty,2,gy-ty+1);
   if(P.fol){ for(let dy=-tr;dy<=tr;dy++) for(let dx=-tr;dx<=tr;dx++){ const d=Math.sqrt(dx*dx+dy*dy*1.2); if(d<tr*0.95+Math.sin(Math.atan2(dy,dx)*5)*0.6){ c.fillStyle=(dx+dy>tr*0.5)?P.folD:((season==='spring'&&hash(dx,dy)<0.18)?P.acc:(season==='fall'&&hash(dx,dy)<0.18?'#f2b13e':P.fol)); c.fillRect(tx+dx,ty+dy,1,1);} } }
   else { c.fillStyle='#6a4020'; c.fillRect(tx-3,ty-3,1,4); c.fillRect(tx+2,ty-4,1,5); c.fillRect(tx,ty-6,1,7); c.fillStyle='#ffffff'; c.fillRect(tx-3,ty-4,1,1); c.fillRect(tx+2,ty-5,1,1); c.fillRect(tx,ty-7,1,1); }
-  if(RID==='hearth'&&on('light.porch')&&dark>0.2){ c.fillStyle=`rgba(255,220,120,${0.35*dark})`; c.fillRect(X,gy-2,10,6); }
+  if(RID==='hearth'&&on(CONFIG.rooms.porch.props.porchLight)&&dark>0.2){ c.fillStyle=`rgba(255,220,120,${0.35*dark})`; c.fillRect(X,gy-2,10,6); }
   if(dark>0){ c.fillStyle=`rgba(10,14,50,${dark*0.5})`; c.fillRect(X,Math.round(Y+WH*0.5),WW,WH); }
   for(const p of outParts) drawPart(c,p);
   if(R.glass){ c.fillStyle='rgba(255,255,255,.18)'; c.fillRect(X+2,Y+2,1,3); c.fillRect(X+3,Y+1,1,2); c.fillRect(X+WW-13,Y+WH-10,1,2); }
@@ -1724,25 +1771,49 @@ function renderHome(){
   const list=Object.values(Home.ents).filter(e=>e.room&&(room==='All'||e.room===room));
   $('#grid').innerHTML=list.map(tileHTML).join('');
 }
-function tileHTML(e){ const d=dom(e.entity_id), a=e.attributes, n=a.friendly_name, on=isActive(e)&&d!=='climate';
-  if(d==='climate') return `<div class="tile wide ${isActive(e)?'on':''}" data-id="${e.entity_id}" data-ro="1"><div class="top"><img class="ico" src="${ico('snow')}" alt=""><div><div class="tname">${n}</div><div class="tstate">${stateText(e)}</div></div></div>
-    <div class="tctl"><button class="round" data-power="1" style="width:auto;padding:0 12px;font-size:16px">${e.state==='off'?'Turn on':'Turn off'}</button><button class="round" data-temp="-1">-</button><div class="big">${Math.round(a.temperature)}°</div><button class="round" data-temp="1">+</button></div></div>`;
-  if(d==='media_player') return `<div class="tile wide ${isActive(e)?'on':''}" data-id="${e.entity_id}" data-ro="1"><div class="top"><img class="ico" src="${ico('note')}" alt=""><div><div class="tname">${a.media_title||n}</div><div class="tstate">${e.state==='playing'?'Playing':'Paused'}${a.media_artist?' · '+a.media_artist:''}</div></div></div>
-    <div class="tctl"><button class="round" data-media="media_previous_track">&lt;&lt;</button><button class="round" data-media="media_play_pause" style="width:auto;padding:0 12px;font-size:16px">${e.state==='playing'?'Pause':'Play'}</button><button class="round" data-media="media_next_track">&gt;&gt;</button><input type="range" data-vol="1" min="0" max="100" value="${Math.round((a.volume_level??0.3)*100)}" aria-label="Volume" style="flex:1;margin:0"></div></div>`;
-  const ro=d==='sensor';
-  return `<div class="tile ${on?'on':''} ${ro?'ro':''}" data-id="${e.entity_id}" ${ro?'data-ro="1"':''}><div class="top"><img class="ico" src="${ico(iconFor(e))}" alt=""><div><div class="tname">${n}</div><div class="tstate">${stateText(e)}</div></div></div>
-    ${d==='light'&&e.state==='on'?`<input type="range" min="1" max="100" value="${Math.round((a.brightness??255)/2.55)}" aria-label="Brightness">`:''}</div>`; }
+const SWATCHES=[['Warm',null,2700,'#ffc27a'],['White',null,5000,'#fff6e8'],['Red',[255,60,40]],['Amber',[255,150,40]],['Green',[80,220,90]],['Blue',[60,120,255]],['Purple',[170,80,255]],['Pink',[255,110,190]]];
+const btn=(attrs,label,wide)=>`<button class="round" ${attrs}${wide?' style="width:auto;padding:0 10px;font-size:15px"':''}>${label}</button>`;
+function tileHTML(e){ const d=dom(e.entity_id), a=e.attributes, n=a.friendly_name||e.entity_id, on=isActive(e), id=e.entity_id;
+  const head=(icon,title,sub)=>`<div class="top"><img class="ico" src="${ico(icon)}" alt=""><div><div class="tname">${title}</div><div class="tstate">${sub}</div></div></div>`;
+  const custom=(e.controls||[]).map((c,i)=>btn(`data-ctl="${i}"`,c.label,true)).join('');
+  if(d==='climate'){ const modes=(a.hvac_modes||['off','cool']).filter(m=>m!=='off'), fans=a.fan_modes||[];
+    return `<div class="tile wide blk ${on?'on':''}" data-id="${id}" data-ro="1">${head('snow',n,stateText(e))}
+      <div class="tctl">${btn('data-power="1"',e.state==='off'?'Turn on':'Turn off',true)}${btn('data-temp="-1"','-')}<div class="big" style="min-width:56px;font-size:26px">${Math.round(a.temperature)}°</div>${btn('data-temp="1"','+')}</div>
+      <div class="tchips">${modes.map(m=>`<button class="chipb ${e.state===m?'sel':''}" data-hvac="${m}">${{cool:'Cool',fan_only:'Fan',heat_cool:'Auto'}[m]||HVAC[m]||m}</button>`).join('')}${fans.length?'<span class="tsep"></span>'+fans.map(f=>`<button class="chipb ${a.fan_mode===f?'sel':''}" data-fan="${f}">${f}</button>`).join(''):''}</div></div>`; }
+  if(d==='media_player'){ const off=mpOff(e), title=off?n:(a.media_title||a.app_name||n), sub=off?'Off':`${stateText(e).replace(/^(Playing|Paused) · .*/,'$1')}${a.media_artist?' · '+a.media_artist:''}`;
+    let ctl=(e.remote||mpHas(e,MP.TURN_ON)||mpHas(e,MP.TURN_OFF))?btn('data-power="1"',off?'Turn on':'Turn off',true):'';
+    if(!off&&(mpHas(e,MP.PAUSE)||mpHas(e,MP.PLAY))) ctl+=(mpHas(e,MP.PREV)?btn('data-media="media_previous_track"','&lt;&lt;'):'')+btn('data-media="media_play_pause"',e.state==='playing'?'Pause':'Play',true)+(mpHas(e,MP.NEXT)?btn('data-media="media_next_track"','&gt;&gt;'):'');
+    if(!off&&mpHas(e,MP.VOLUME_STEP)) ctl+=btn('data-media="volume_down"','Vol -',true)+btn('data-media="volume_up"','Vol +',true);
+    if(!off&&mpHas(e,MP.MUTE)) ctl+=btn('data-mute="1"',a.is_volume_muted?'Unmute':'Mute',true);
+    if(!off&&mpHas(e,MP.VOLUME_SET)&&!mpHas(e,MP.VOLUME_STEP)) ctl+=`<input type="range" data-vol="1" min="0" max="100" value="${Math.round((a.volume_level??0.3)*100)}" aria-label="Volume" style="flex:1;margin:0;min-width:80px">`;
+    const src=!off&&mpHas(e,MP.SOURCE)&&(a.source_list||[]).length?`<select data-src="1" class="tsel" aria-label="${e.remote?'App':'Input'}">${a.source_list.map(x=>`<option ${x===a.source?'selected':''}>${x}</option>`).join('')}</select>`:'';
+    return `<div class="tile wide blk ${on?'on':''}" data-id="${id}" data-ro="1">${head(iconFor(e),title,off?'Off':sub)}
+      <div class="tctl" style="flex-wrap:wrap;gap:6px">${ctl}${src}${custom}</div></div>`; }
+  if(d==='button') return `<div class="tile" data-id="${id}">${head('bang',n,'Tap to press')}</div>`;
+  const ro=d==='sensor'||d==='weather', color=d==='light'&&(a.supported_color_modes||[]).some(m=>['hs','rgb','rgbw','rgbww','xy','color_temp'].includes(m));
+  return `<div class="tile ${on?'on':''} ${ro?'ro':''} ${color&&e.state==='on'?'wide':''}" data-id="${id}" ${ro?'data-ro="1"':''}>${head(iconFor(e),n,stateText(e))}
+    ${d==='light'&&e.state==='on'?`<input type="range" min="1" max="100" value="${Math.round((a.brightness??255)/2.55)}" aria-label="Brightness">`:''}
+    ${color&&e.state==='on'?`<div class="swatches">${SWATCHES.map(([nm,rgb,k,css],i)=>`<button class="sw" data-sw="${i}" title="${nm}" style="background:${css||`rgb(${rgb})`}"></button>`).join('')}</div>`:''}
+    ${custom?`<div class="tctl">${custom}</div>`:''}</div>`; }
 $('#tabs').addEventListener('click',e=>{ const b=e.target.closest('.tab'); if(!b) return; room=b.dataset.room; renderHome(); sfx('ui'); });
 $('#scenes').addEventListener('click',e=>{ const b=e.target.closest('.scn'); if(!b) return; runScene(b.dataset.scene); });
 $('#grid').addEventListener('click',e=>{ const t=e.target.closest('.tile'); if(!t||e.target.closest('input')) return; const id=t.dataset.id;
-  const pw=e.target.closest('[data-power]'); if(pw){ toggleEntity(id); sfx('ui'); return; }
+  const en=Home.get(id);
+  const pw=e.target.closest('[data-power]'); if(pw){ if(dom(id)==='media_player') mpPower(en,mpOff(en)); else toggleEntity(id); sfx('ui'); return; }
   const md=e.target.closest('[data-media]'); if(md){ Home.call('media_player',md.dataset.media,{entity_id:id}); sfx('ui'); return; }
+  const mu=e.target.closest('[data-mute]'); if(mu){ Home.call('media_player','volume_mute',{entity_id:id,is_volume_muted:!en.attributes.is_volume_muted}); sfx('ui'); return; }
+  const hv=e.target.closest('[data-hvac]'); if(hv){ Home.call('climate','set_hvac_mode',{entity_id:id,hvac_mode:hv.dataset.hvac}); sfx('ui'); return; }
+  const fn=e.target.closest('[data-fan]'); if(fn){ Home.call('climate','set_fan_mode',{entity_id:id,fan_mode:fn.dataset.fan}); sfx('ui'); return; }
+  const sw=e.target.closest('[data-sw]'); if(sw){ const [,rgb,k]=SWATCHES[+sw.dataset.sw]; Home.call('light','turn_on',{entity_id:id,...(k?{color_temp_kelvin:k}:{rgb_color:rgb})}); sfx('ui'); return; }
+  const cb=e.target.closest('[data-ctl]'); if(cb){ const c=en.controls[+cb.dataset.ctl]; const [cd,cs]=c.service.split('.'); Home.call(cd,cs,{entity_id:c.entity||id,...(c.data||{})}); sfx('ui'); return; }
+  if(e.target.closest('select')) return;
   const tb=e.target.closest('[data-temp]'); if(tb){ const c=Home.get(id); Home.call('climate','set_temperature',{entity_id:id,temperature:c.attributes.temperature+(+tb.dataset.temp)}); sfx('ui'); return; }
   if(t.dataset.ro) return; toggleEntity(id); });
 $('#grid').addEventListener('input',e=>{ if(e.target.type!=='range'||e.target.dataset.vol) return; const t=e.target.closest('.tile'); t.querySelector('.tstate').textContent=`On · ${e.target.value}%`; });
-$('#grid').addEventListener('change',e=>{ if(e.target.type!=='range') return; const id=e.target.closest('.tile').dataset.id;
+$('#grid').addEventListener('change',e=>{ if(e.target.dataset.src){ Home.call('media_player','select_source',{entity_id:e.target.closest('.tile').dataset.id,source:e.target.value}); sfx('ui'); return; }
+  if(e.target.type!=='range') return; const id=e.target.closest('.tile').dataset.id;
   if(e.target.dataset.vol){ Home.call('media_player','volume_set',{entity_id:id,volume_level:(+e.target.value)/100}); return; } Home.call('light','turn_on',{entity_id:id,brightness_pct:+e.target.value}); });
-function runScene(key){ const s=CONFIG.scenes.find(x=>x.key===key); if(!s) return; Home.call('scene','turn_on',{entity_id:s.entity}); sfx('yay'); toast(`${s.name} scene`);
+function runScene(key){ const s=CONFIG.scenes.find(x=>x.key===key); if(!s) return; Home.call(dom(s.entity),'turn_on',{entity_id:s.entity}); sfx('yay'); toast(`${s.name} scene`);
   if(key==='night') setTimeout(goSleep,600); if(key==='morning') wake(false); }
 
 /* ---- device change → UI + pet reaction ---- */
@@ -1972,7 +2043,7 @@ function porchDogUpdate(dt){
 }
 function drawPorchDoorAndDog(c,t){
   if(RID!==CONFIG.dog.window) return; const d=pdog;
-  if(d.doorT>0){ const lit=on('light.living_room');                       // door swung open
+  if(d.doorT>0){ const lit=on(CONFIG.rooms.hearth.props.lamp);                       // door swung open
     c.fillStyle=lit?'#c8945a':'#3a2a20'; c.fillRect(34,22,18,33); c.fillStyle=lit?'#a87444':'#2a1e18'; c.fillRect(34,46,18,9);
     c.fillStyle='#3f6a4a'; c.fillRect(34,22,3,33); c.fillStyle='#2c4a34'; c.fillRect(36,22,1,33); }
   if(d.state!=='inside') drawDogBody(c,t,d);
@@ -1995,7 +2066,7 @@ function windowDogUpdate(dt){
 }
 function peekExcited(sec){ wdog.excite=Math.max(wdog.excite,sec); wdog.goal=1; }
 function drawWindowDog(c,t){
-  if(RID!==CONFIG.dog.window) return; const w=wdog, lit=on('light.living_room');
+  if(RID!==CONFIG.dog.window) return; const w=wdog, lit=on(CONFIG.rooms.hearth.props.lamp);
   // the room inside
   c.fillStyle=lit?'#a8784a':'#5a4434'; c.fillRect(6,17,22,13); c.fillStyle=lit?'#8a6038':'#4a382a'; c.fillRect(6,26,22,4);
   c.fillStyle='#b8433a'; c.fillRect(6,17,2,13); c.fillRect(26,17,2,13); c.fillStyle='#e0b050'; c.fillRect(6,23,2,1); c.fillRect(26,23,2,1);
@@ -2029,7 +2100,7 @@ function tapWindowDog(pt){
   toast(`${CONFIG.dog.name} says hi from the window!`); fx({joy:+1}); addGrudge(-1); return true; }
 
 /* =====================================================================
-   NETWORK — when served by ember_server.py the Pi keeps Ember's state and
+   NETWORK — when served by the Ember server the Pi keeps Ember's state and
    other people on the LAN can interact through the API (see API.md).
    One screen holds the "lease" and runs Ember; other screens mirror it.
    Opened from a file or the preview link, this all stays off.
@@ -2103,16 +2174,32 @@ async function netTick(){
       if(Date.now()-NET.lastPush>2500){ NET.lastPush=Date.now(); S.last=Date.now(); await api('/api/state',{id:NET.id,full:S,summary:netSummary()}); }
     }
     if(Date.now()-KQ.lastPull>2000){ KQ.lastPull=Date.now(); await kPull(); }
+    if(NET.ha&&Date.now()-(NET.haPull||0)>1500){ NET.haPull=Date.now(); await pullHA(); }
     if(!NET.leader&&Date.now()-NET.lastPull>2500){ NET.lastPull=Date.now(); const r=await api('/api/state?full=1'); adopt(r.full,r.pet&&r.pet.activity); }
   }catch(e){}
   NET.busy=false;
 }
 // mirror screens send what you do here to the screen running Ember (the animation still plays locally)
 function relay(action,extra){ if(isFollower()) api(`/api/pet/${action}`,{by:`${S.name}'s ${R.label.toLowerCase()} screen`,...(extra||{})}).catch(()=>{}); }
+function applyServerConfig(cfg){
+  NET.ha=true; backend=ServerBackend;
+  if(cfg.ember) deepMerge(CONFIG,cfg.ember); if(cfg.ember&&cfg.ember.scenes) CONFIG.scenes=cfg.ember.scenes;
+  Home.ents={};
+  Home.init((cfg.devices||[]).map(d=>({entity_id:d.entity_id,name:d.name,room:d.room??null,icon:d.icon,remote:d.remote,controls:d.controls,state:'unavailable',attributes:{friendly_name:d.name||d.entity_id}})));
+  setConn(cfg.ha.status==='connected'?'Home Assistant':'Connecting…',cfg.ha.status==='connected');
+  renderQuick(); updateHUD(); staticKey='';
+}
+async function pullHA(){
+  try{ const r=await api('/api/ha/states'); setConn(r.status==='connected'?'Home Assistant':'HA offline',r.status==='connected');
+    for(const x of r.entities||[]){ const e=Home.get(x.entity_id); if(!e) continue; if(e.name) x.attributes={...x.attributes,friendly_name:e.name};
+      if(e.state!==x.state||JSON.stringify(e.attributes)!==JSON.stringify({...e.attributes,...x.attributes})) Home.set(x.entity_id,x.state,x.attributes); } }catch(e){}
+}
 async function netInit(){
   if(!location.protocol.startsWith('http')) return;
   try{ const r=await fetch('/api/ping',{cache:'no-store'}); if(!r.ok) return; await r.json(); }catch(e){ return; }
   NET.on=true; KQ.lastId=undefined;
+  try{ const cfg=await api('/api/config'); if(cfg.ha&&cfg.ha.configured) applyServerConfig(cfg);
+    if(cfg.trains===false){ CONFIG.trains.enabled=false; for(const r of Object.values(CONFIG.rooms)) r.trains=false; } }catch(e){}
   try{ const r=await api('/api/state?full=1'); if(r.full&&(r.full.last||0)>(S.last||0)) adopt(r.full,r.pet&&r.pet.activity); }catch(e){}
   setInterval(netTick,1500); netTick();
 }
@@ -2158,7 +2245,7 @@ async function openKaraoke(){
   if(NET.on) await kPull();
   renderKaraoke(); $('#karaoke').classList.remove('hidden'); sfx('ui');
   const box=$('#kQR');
-  if(!NET.on){ box.innerHTML=''; $('#kURL').textContent='Type names here, or run ember_server.py so guests can join from their phones.'; return; }
+  if(!NET.on){ box.innerHTML=''; $('#kURL').textContent='Type names here, or run the Ember server so guests can join from their phones.'; return; }
   try{ const info=await api('/api'); const url=CONFIG.remoteUrl||info.remote; $('#kURL').textContent=url.replace(/^https?:\/\//,'');
     if(KQ.qr!==url){ box.innerHTML='';
       if(!window.qrcode) await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='vendor/qrcode.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });   // bundled, works offline

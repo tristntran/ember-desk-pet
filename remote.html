@@ -77,6 +77,7 @@ let mt; function msg(t){ const m=$('#msg'); m.textContent=t; m.classList.add('sh
 async function post(path,body){
   const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({by:by(),...(body||{})})}); const j=await r.json();
   if(!r.ok){ msg(j.error||'Error'); return; }
+  if(!j.queued){ msg('Done!'); setTimeout(load,800); return; }        // Home Assistant acted directly
   if(!j.screen_online){ msg('Sent, but no Ember screen is on right now'); return; }
   for(let i=0;i<12;i++){ await new Promise(res=>setTimeout(res,500)); const a=await (await fetch(j.check,{cache:'no-store'})).json();
     if(a.status==='done'){ msg(a.result&&a.result.ok?'Done!':(a.result&&a.result.msg)||'Ember said no'); break; } if(a.status==='expired'){ msg('Ember didn’t respond'); break; } }
@@ -89,8 +90,9 @@ $('#refresh').onclick=()=>load();
 function bar(label,v){ const c=v<25?'bad':v<50?'mid':''; return `<div class="bar">${label} ${v}<div><i class="${c}" style="width:${v}%"></i></div></div>`; }
 function stateText(d){ const a=d.attributes||{}, dom=d.entity_id.split('.')[0];
   if(dom==='light') return d.state==='on'?`On · ${Math.round((a.brightness??255)/2.55)}%`:'Off';
-  if(dom==='climate') return d.state==='off'?`Off · ${Math.round(a.current_temperature)}° now`:`Cooling to ${a.temperature}° · ${Math.round(a.current_temperature)}° now`;
-  if(dom==='media_player') return `${d.state==='playing'?'Playing':'Paused'} · ${a.media_title||''}`; return d.state==='on'?'On':'Off'; }
+  if(dom==='climate') return d.state==='off'?`Off · ${Math.round(a.current_temperature)}° now`:`${{cool:'Cooling',dry:'Dry',fan_only:'Fan',auto:'Auto',heat:'Heat'}[d.state]||d.state} · set ${a.temperature}° · ${Math.round(a.current_temperature)}° now`;
+  if(dom==='media_player'){ if(['off','standby','unavailable'].includes(d.state)) return 'Off'; const w=a.media_title||a.app_name||a.source||''; return `${d.state==='playing'?'Playing':d.state==='paused'?'Paused':'On'}${w?' · '+w:''}`; }
+  if(dom==='button') return ''; return d.state==='on'?'On':'Off'; }
 async function load(){
   try{
     const [s,info]=await Promise.all([fetch('/api/state',{cache:'no-store'}).then(r=>r.json()),fetch('/api',{cache:'no-store'}).then(r=>r.json())]); S=s; CTRL=info.device_domains||[];
@@ -102,7 +104,12 @@ async function load(){
     $('#sprayB').disabled=!(p.fires||p.misbehaving); $('#sleepB').textContent=p.asleep?'Wake':'Sleep';
     $('#devs').innerHTML=s.devices.filter(d=>CTRL.includes(d.entity_id.split('.')[0])).map(d=>{ const dom=d.entity_id.split('.')[0], on=['on','open','unlocked'].includes(d.state);
       const ctl=dom==='climate'?`<button class="${d.state!=='off'?'on':''}" data-e="${d.entity_id}">${d.state==='off'?'On':'Off'}</button><button data-t="${d.entity_id}" data-d="-1">−</button><button data-t="${d.entity_id}" data-d="1">+</button>`
-        :dom==='media_player'?`<button class="${d.state==='playing'?'on':''}" data-m="${d.entity_id}" data-s="play_pause">${d.state==='playing'?'Pause':'Play'}</button><button data-m="${d.entity_id}" data-s="next">Next</button>`
+        :dom==='media_player'?(()=>{ const off=['off','standby','unavailable'].includes(d.state), f=d.attributes.supported_features||0;
+            let h=`<button class="${off?'':'on'}" data-m="${d.entity_id}" data-s="${off?'turn_on':'turn_off'}">${off?'On':'Off'}</button>`;
+            if(!off&&(f&1)) h+=`<button data-m="${d.entity_id}" data-s="play_pause">${d.state==='playing'?'Pause':'Play'}</button>`;
+            if(!off&&(f&1024)) h+=`<button data-m="${d.entity_id}" data-s="volume_down">Vol−</button><button data-m="${d.entity_id}" data-s="volume_up">Vol+</button>`;
+            return h; })()
+        :dom==='button'?`<button data-m="${d.entity_id}" data-s="press">Press</button>`
         :`<button class="${on?'on':''}" data-e="${d.entity_id}">${on?'Turn off':'Turn on'}</button>`;
       return `<div class="dev"><span>${d.name}<small>${d.room} · ${stateText(d)}</small></span>${ctl}</div>`; }).join('')||'<div class="sub">No controllable devices.</div>';
     document.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>post(`/api/devices/${b.dataset.e}/toggle`));

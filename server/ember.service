@@ -1,0 +1,32 @@
+# Starts Ember's server at boot.  sudo cp server/ember.service /etc/systemd/system/ && sudo systemctl enable --now ember
+# Assumes the repo is in /home/pi/ember with the ember-server program next to index.html. Change User/paths if not.
+[Unit]
+Description=Ember desk pet server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/ember
+Environment=EMBER_DIR=/home/pi/ember
+ExecStart=/home/pi/ember/ember-server
+Restart=on-failure
+RestartSec=3
+# lock it down: it can only write its own state file
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pi/ember
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
