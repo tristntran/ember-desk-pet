@@ -333,7 +333,7 @@ const CONFIG = {
   // Play needs energy: won't start below these, quits mid-game below half of them
   play: { minFuel:25, minRest:25 },
   // Cleaning is unpleasant: cleaning again within grudgeMin minutes makes it worse
-  tidy: { grudgeMin:30 },
+  tidy: { grudgeMin:30, seconds:5 },   // how long Ember has to sweep (in a maid outfit, against its will)
   focus: { choices:[5,15,25,45,60], breakMin:5, onStart:[], onEnd:[], bpm:84, metronome:false },
   ha: {
     enabled: false,                                   // flip to true on your device
@@ -993,8 +993,8 @@ function startToy(id){
 const EFFECTS={
   eatLog:      { fuel:+38, joy:+3, tidy:-8 },
   eatSmall:    { fuel:+22, joy:+2, tidy:-5 },
-  tidy:        { tidy:+100, rest:-6, joy:-10 },   // being swept is miserable
-  sweeping:    { joy:-1.5 },                    // per second while the broom is out
+  tidy:        { tidy:+100, rest:-6, joy:-10, fuel:-6 },   // forced to clean its own room: tiring, boring, hungry work
+  sweeping:    { joy:-1.5, fuel:-1 },                     // per second while sweeping
   grudge:      { joy:-8, rest:-3 },             // cleaned again too soon
   squirt:      { fuel:-4, joy:-5 },                 // water on a fire… not fun
   mischief:    { tidy:-2.5, joy:+0.6 },            // per second of misbehaving (he's having a blast)  // he does NOT like being swept
@@ -1024,6 +1024,8 @@ function actTidy(){
   if(S.timer&&S.timer.mode==='focus') return toast(`Let ${S.name} nap, ${Math.ceil((S.timer.end-Date.now())/60000)} min left`);
   if(S.asleep){ S.asleep=false; toast(`You woke ${S.name} up…`); updateHUD(); }
   broom={t:0}; pet.state='tidy'; pet.onArrive=null; pet.grrT=0; pet.dodgeT=0; setExpr('grumpy',3); say('grr',1.4); sfx('grr');
+  for(let i=0;i<8;i++) spawn({type:'steam',x:pet.cxD+rand(-8,8),y:pet.glowY+rand(-6,4),vx:rand(-8,8),vy:rand(-10,-2),life:0.7});   // *poof* into the maid outfit
+  toast(`${S.name} put on the maid outfit… and is NOT happy about it`);
 }
 /* ---- mischief & the spray bottle ---- */
 const MISCHIEF_MIN={rare:[20,40],normal:[8,20],often:[1,3]};   // minutes between episodes
@@ -1293,6 +1295,18 @@ function drawFace(c,cx,ey,s,expr,E,blinking,outline){
 }
 function curExpr(){ if(pet.state==='sleep') return 'sleep'; return pet.expr||(lowestNeed().v<20?'sad':'normal'); }
 
+/* ---- maid outfit (worn while forced to tidy) ---- */
+const MAID={dress:'#2a2a48',dressL:'#3e3e66',apron:'#fffaf0',frill:'#e4dcef',ribbon:'#1a1a2a'};
+const maidOn=()=>pet.state==='tidy'&&!!broom;
+function maidHat(c,cx,y,half){        // frilly headdress: ruffle row on top, ribbon band below
+  for(let dx=-half;dx<=half;dx++){ c.fillStyle=MAID.apron; c.fillRect(cx+dx,y+1,1,1); if((dx+half)%2===0){ c.fillStyle=MAID.apron; c.fillRect(cx+dx,y,1,1); } else { c.fillStyle=MAID.frill; c.fillRect(cx+dx,y,1,1); } }
+  c.fillStyle=MAID.ribbon; c.fillRect(cx-half-1,y+1,1,2); c.fillRect(cx+half+1,y+1,1,2); }
+function maidApron(c,cx,y0,y1,inside,half){   // navy dress + white apron with a frilly hem and a little bow
+  for(let y=y0;y<=y1;y++) for(let dx=-half-2;dx<=half+2;dx++){ if(!inside(dx,y)) continue;
+    const ap=Math.abs(dx+0.5)<=half-(y===y0?1:0); let col=ap?MAID.apron:(dx%3===0?MAID.dressL:MAID.dress); if(ap&&y===y1) col=(dx%2?MAID.apron:MAID.frill);
+    c.fillStyle=col; c.fillRect(cx+dx,y,1,1); }
+  c.fillStyle=MAID.ribbon; c.fillRect(cx-1,y0,2,1); }
+
 /* ---- body 1: ember on the logs ---- */
 const PET_BRIGHT={o:'#6a1e0c',b:'#ff8a2a',l:'#ffc24a',d:'#d8541c',belly:'#ffe49a'};
 const PET_DIM={o:'#4a140a',b:'#b84a22',l:'#d87a34',d:'#8a2e14',belly:'#e8a060'};
@@ -1338,6 +1352,8 @@ function drawEmber(c,t){
       if(k>0.4 && hash(dx*3,dy*7)>0.86) col=mixA(col,crack,Math.min(1,(k-0.4)*1.8)); }   // glowing cracks in the coal
     c.fillStyle=col; c.fillRect(cx+dx,base+dy,1,1);
   }
+  if(maidOn()){ const deep=(x,y)=>inside(x,y-base)&&inside(x-1,y-base)&&inside(x+1,y-base)&&inside(x,y-base+1);
+    maidApron(c,cx,base-Math.floor(hh*0.46),base-2,deep,Math.max(2,Math.round(hw*0.36))); maidHat(c,cx,topY,Math.round(hw*0.55)); }
   drawFace(c,cx,base-Math.round(hh*0.6),hw>=8?4:3,curExpr(),k>0.5?'#120304':'#2a0e08',p.blink>0,C.o);
   Object.assign(p,{cxD:cx,topY,headY:topY-2,eatY:FY,sparkY:topY-1,bubY:topY-6,glowX:cx,glowY:FY-8+Math.round(2*k),box:[cx-12,topY-10,cx+12,FY+2]});
 }
@@ -1361,6 +1377,7 @@ function drawCandle(c,t){
     c.fillStyle=flameCol(rr,true,k,k>0.6&&rr>0.6&&pulse>0.6); c.fillRect(cx-w+sway,y,1+w*2,1);
     if(k<0.5&&rr<0.6&&j>0){ c.fillStyle='#fff4b0'; c.fillRect(cx+sway,y,1,1); } }
   c.fillStyle='#6a8cff'; c.fillRect(cx,top-3,1,1);
+  if(maidOn()){ const ok=(x,y)=>x>-hw&&x<hw-1&&y>top&&y<base-1; maidApron(c,cx,base-Math.max(5,Math.round(waxH*0.48)),base-2,ok,2); maidHat(c,cx,top,hw-2); }
   drawFace(c,cx,top+Math.max(2,Math.round(waxH*0.28)),3,curExpr(),'#3a2a1a',p.blink>0,'#8a7a58');
   Object.assign(p,{cxD:cx,topY:top-3-fH,headY:top-3-fH,eatY:top-3,sparkY:top-3-fH,bubY:top-4-fH,glowX:cx,glowY:top-5,box:[cx-9,top-fH-6,cx+9,base+2]});
 }
@@ -1377,6 +1394,7 @@ function drawLantern(c,t){
   c.fillStyle='#2a2a30'; c.fillRect(cx-6,top+3,1,gh); c.fillRect(cx+6,top+3,1,gh); c.fillRect(cx-6,top+3+gh,13,1);
   if(!dim){ const fy=top+3+gh-2, fh=Math.round(3*(1-k)+1.5*k);
     for(let j=0;j<fh;j++){ c.fillStyle=flameCol(j/fh,true,k,false); c.fillRect(cx,fy-j+(k<0.5&&Math.sin(t*9)>0.5?-1:0),1,1); } }
+  if(maidOn()){ const ok=(x,y)=>x>=-5&&x<=5&&y>=top+3&&y<top+3+gh; maidApron(c,cx,top+3+Math.round(gh*0.6),top+2+gh,ok,3); maidHat(c,cx,top-2,4); }
   drawFace(c,cx,top+5,3,curExpr(),'#3a2210',p.blink>0,'#2a2a30');
   c.fillStyle='#2a2a30'; c.fillRect(cx-4,top+4+gh,9,1); c.fillRect(cx-1,top+5+gh,3,1);
   Object.assign(p,{cxD:cx,topY:top,headY:top+gh+6,eatY:top,sparkY:top,bubY:top-2,glowX:cx,glowY:top+3+gh/2,box:[cx-9,hy,cx+9,top+gh+7]});
@@ -1478,26 +1496,31 @@ function update(dt){
       if(p.misT<=0) endMischief('ignored');
       break; }
     case 'cowork': coworkTick(dt); break;
-    case 'tidy': if(broom){ const bx=broomX()+4, near=Math.abs(bx-p.cxD)<12;
-        setExpr('grumpy',0.3); p.lookUser=0; p.facing=bx<p.cxD?-1:1;          // glare at the broom
+    case 'tidy': if(broom){
+        setExpr('grumpy',0.3); p.lookUser=0;
         p.grrT-=dt; if(p.grrT<=0){ p.grrT=rand(0.7,1.1); spawn({type:'dust',col:'#8a8480',x:p.cxD+rand(-3,3),y:p.sparkY,vx:rand(-6,6),vy:rand(-14,-8),life:0.9,s:2}); if(Math.random()<0.5) sfx('grr'); if(Math.random()<0.4) say('grr',1); }
         p.sweepAcc=(p.sweepAcc||0)+dt; if(p.sweepAcc>=1){ p.sweepAcc=0; fx(EFFECTS.sweeping); }
         if(Math.random()<dt*3) spawn({type:'steam',x:p.cxD+rand(-5,5),y:p.sparkY,vx:rand(-4,4),vy:rand(-10,-5),life:0.8});   // fuming
-        p.dodgeT-=dt;
-        if(mobile()){ if(near){ const away=bx<p.cxD?R.range[1]:R.range[0], d=away-p.x; if(Math.abs(d)>0.8){ p.x+=Math.sign(d)*Math.min(Math.abs(d),30*dt); p.walkT+=dt; } } }
-        else if(near&&p.dodgeT<=0){ p.dodgeT=0.7; hop(40); } }
+        if(Math.random()<dt*2.2) playSeq([[rand(1800,2400),0.05,'sine']]);                         // swish
+        if(Math.random()<dt*1.2) spawn({type:'water',x:p.cxD+rand(-6,6),y:p.sparkY+3,vx:rand(-10,10),vy:rand(-14,-6),g:80,life:0.5});   // sweat
+        if(mobile()){ const target=clamp(sweepX()-p.facing*7,R.range[0],R.range[1]), d=target-p.x;           // drags itself along with the broom
+          if(Math.abs(d)>0.6){ p.x+=Math.sign(d)*Math.min(Math.abs(d),26*dt); p.walkT+=dt; } p.facing=sweepDir(); }
+        else { p.sx=1+Math.sin(broom.t*9)*0.06; p.facing=sweepDir(); if(R.pet==='lantern') p.angV+=Math.sin(broom.t*9)*dt*3; } }
       break;
     case 'sleep': p.zT-=dt; if(p.zT<=0){ p.zT=1.4; spawn({type:'zz',x:p.cxD+5,y:p.bubY,vx:5,vy:-7,life:2.2}); }
       if(s.rest>=100 && !isNight() && !S.timer) wake(false); break;
   }
   if(food&&!food.landed){ food.vy+=200*dt; food.y+=food.vy*dt; const ly=mobile()?R.anchor.y:p.eatY; if(food.y>=ly){ food.y=ly; food.landed=true; burst(food.x,ly,5,'ember'); } if(!mobile()) food.x=p.cxD; }
   if(broom){ broom.t+=dt; const D=R.dirt; if(Math.random()<dt*25) spawn({type:'dust',col:D.cols[1],x:broomX()+rand(-2,4),y:D.y-rand(0,3),vx:rand(-8,8),vy:rand(-10,-3),g:10,life:rand(.4,.8),s:Math.random()<0.3?2:1});
-    if(broom.t>=2.4){ broom=null; S.scorch=S.scorch.filter(m=>m.room!==RID); const was=s.tidy; fx(EFFECTS.tidy); if(was<70) addFP(5); for(let i=0;i<6;i++) spawn({type:'sparkle',x:rand(D.x0,D.x1),y:D.y-rand(2,12),life:0.8}); p.state='idle'; p.think=7; p.facing=-p.facing; p.lookUser=0; say('grr',2.2); setExpr('grumpy',6); p.sulk=6; sfx('grr');
+    if(broom.t>=CONFIG.tidy.seconds){ broom=null; for(let i=0;i<8;i++) spawn({type:'steam',x:p.cxD+rand(-8,8),y:p.glowY+rand(-6,4),vx:rand(-8,8),vy:rand(-10,-2),life:0.7}); S.scorch=S.scorch.filter(m=>m.room!==RID); const was=s.tidy; fx(EFFECTS.tidy); if(was<70) addFP(5); for(let i=0;i<6;i++) spawn({type:'sparkle',x:rand(D.x0,D.x1),y:D.y-rand(2,12),life:0.8}); p.state='idle'; p.think=7; p.facing=-p.facing; p.lookUser=0; say('grr',2.2); setExpr('grumpy',6); p.sulk=6; sfx('grr');
       const now=Date.now(); if(S.lastTidy&&now-S.lastTidy<CONFIG.tidy.grudgeMin*60000){ fx(EFFECTS.grudge); toast(`Again?! ${S.name} is really annoyed`); p.sulk=9; setExpr('grumpy',9); } S.lastTidy=now; } }
   for(const cl of clouds){ cl.x+=cl.v*dt; if(cl.x>R.win.x+R.win.w+2) cl.x=R.win.x-cl.img.width-2; }
   updParts(parts,dt); updParts(outParts,dt,R.win.y+R.win.h+1);
 }
-function broomX(){ const D=R.dirt, k=broom.t/2.4; const tri=k<0.5?k*2:2-k*2; return D.x0+tri*(D.x1-D.x0-8); }
+// two passes back and forth across the mess
+function sweepX(){ const D=R.dirt, k=(broom.t/CONFIG.tidy.seconds*2)%1; const tri=k<0.5?k*2:2-k*2; return D.x0+4+tri*(D.x1-D.x0-12); }
+function sweepDir(){ const k=(broom.t/CONFIG.tidy.seconds*2)%1; return k<0.5?1:-1; }
+function broomX(){ return mobile()?pet.cxD+pet.facing*7-4:sweepX(); }
 
 /* =====================================================================
    RENDER
@@ -1517,7 +1540,7 @@ function render(){
   drawScorch(wctx);
   R.dyn(wctx,T);
   if(food){ const m=MAPS[food.kind]; const sc=1-(food.eaten||0); if(sc>0.05){ const w=Math.max(1,Math.round(m.w*sc)); wctx.save(); wctx.translate(food.x-w/2,food.y-m.h); wctx.scale(w/m.w,1); drawMap(wctx,m,0,0); wctx.restore(); } }
-  if(broom) drawMap(wctx,MAPS.broom,Math.round(broomX()),D.y-8);
+  if(broom&&!mobile()) drawMap(wctx,MAPS.broom,Math.round(broomX()),D.y-8);
   const wxDark=wx==='rain'?0.18:(wx==='cloudy'||wx==='snow')?0.08:0;
   const closed=R.props.curtains&&on2(RP('curtains'));
   const tintA=clamp(dark*0.6+wxDark+(closed?0.12*(1-dark):0),0,0.75);
@@ -1538,6 +1561,7 @@ function render(){
   // ---- pet & fx ----
   ({ember:drawEmber,candle:drawCandle,lantern:drawLantern})[R.pet](ctx,T);
   drawCowork(ctx);
+  if(broom&&mobile()) drawMap(ctx,MAPS.broom,Math.round(broomX()),R.dirt.y-8+(Math.sin(broom.t*12)>0?0:1));
   if(ball){ const bx=Math.round(ball.x), by=Math.round(ball.y); ctx.globalCompositeOperation='lighter'; glow(bx,by-3,8,'rgba(255,180,60,.35)'); ctx.globalCompositeOperation='source-over'; drawMap(ctx,MAPS.spark,bx-3,by-7); }
   for(const b of bubbles){ ctx.fillStyle='rgba(191,234,255,.9)'; const n=b.r*6; for(let k=0;k<n;k++){ const an=k/n*Math.PI*2; ctx.fillRect(Math.round(b.x+Math.cos(an)*b.r),Math.round(b.y+Math.sin(an)*b.r),1,1); } ctx.fillStyle='#ffffff'; ctx.fillRect(Math.round(b.x-1),Math.round(b.y-1),1,1); }
   if(feather) drawMap(ctx,MAPS.feather,Math.round(feather.x),Math.round(feather.y)-8);
