@@ -40,6 +40,7 @@ MTA_CACHE_SECONDS = 20
 
 PET_ACTIONS = {"feed", "play", "pet", "tidy", "sleep", "wake", "spray", "mischief"}
 TOYS = {"ball", "bubbles", "music", "feather"}
+FOODS = {"log", "pinecone", "wax", "oil", "pepper"}
 DEVICE_SERVICES = {"toggle", "turn_on", "turn_off", "set_temperature", "play_pause", "play", "pause", "next", "previous", "volume_set"}
 STATIC_FILES = {"/index.html", "/remote.html", "/config.local.js", "/vendor/qrcode.js"}
 LEASE_SECONDS = 10      # a screen must check in this often to stay the one running Ember
@@ -180,7 +181,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if p in ("/api", "/api/"):
             return self.send_json({
                 "name": "Ember API", "docs": "See API.md",
-                "pet_actions": sorted(PET_ACTIONS), "toys": sorted(TOYS),
+                "pet_actions": sorted(PET_ACTIONS), "toys": sorted(TOYS), "foods": sorted(FOODS),
                 "device_domains": sorted(API_DOMAINS), "device_services": sorted(DEVICE_SERVICES),
                 "token_required_for_post": bool(API_TOKEN), "lan_url": lan_url(), "remote": lan_url() + "/remote"})
         if p == "/api/ping":
@@ -257,8 +258,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             toy = body.get("toy")
             if action == "play" and toy is not None and toy not in TOYS:
                 return self.send_json({"error": f"unknown toy; try one of {sorted(TOYS)}"}, 400)
+            food = body.get("food")
+            if action == "feed" and food is not None and food not in FOODS:
+                return self.send_json({"error": f"unknown food; try one of {sorted(FOODS)}"}, 400)
             with lock:
-                a = enqueue({"type": "pet", "action": action, "toy": toy}, by)
+                a = enqueue({"type": "pet", "action": action, "toy": toy, "food": food}, by)
                 online = bool(leader_alive())
             return self.send_json({"queued": a["id"], "screen_online": online, "check": f"/api/actions/{a['id']}"}, 202)
 

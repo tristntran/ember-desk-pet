@@ -59,9 +59,10 @@ button:disabled{opacity:.45}
   <div class="card">
     <h2>Interact</h2>
     <div class="btns">
-      <button data-a="feed">Feed</button><button data-a="play" id="playB">Play</button><button data-a="pet">Pet</button><button data-a="tidy">Tidy</button>
+      <button data-a="feed" id="feedB">Feed</button><button data-a="play" id="playB">Play</button><button data-a="pet">Pet</button><button data-a="tidy">Tidy</button>
       <button data-a="spray" id="sprayB" class="hot">Spray</button><button data-a="sleep" id="sleepB">Sleep</button><button data-a="mischief">Mischief</button><button id="refresh">Refresh</button>
     </div>
+    <div class="toys" id="foodRow"><button data-food="log">Log</button><button data-food="pinecone">Pinecone</button><button data-food="pepper" class="hot">Pepper!</button></div>
     <div class="toys" id="toys"><button data-toy="ball">Ball</button><button data-toy="bubbles">Bubbles</button><button data-toy="music">Music</button><button data-toy="feather">Feather</button></div>
   </div>
   <div class="card"><h2>Home</h2><div id="devs"></div></div>
@@ -81,7 +82,8 @@ async function post(path,body){
     if(a.status==='done'){ msg(a.result&&a.result.ok?'Done!':(a.result&&a.result.msg)||'Ember said no'); break; } if(a.status==='expired'){ msg('Ember didn’t respond'); break; } }
   load();
 }
-document.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{ const a=b.dataset.a; if(a==='play'){ $('#toys').classList.toggle('show'); return; } post(`/api/pet/${S&&S.pet&&S.pet.asleep&&a==='sleep'?'wake':a}`); });
+document.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{ const a=b.dataset.a; if(a==='play'){ $('#toys').classList.toggle('show'); return; } if(a==='feed'){ $('#foodRow').classList.toggle('show'); return; } post(`/api/pet/${S&&S.pet&&S.pet.asleep&&a==='sleep'?'wake':a}`); });
+document.querySelectorAll('[data-food]').forEach(b=>b.onclick=()=>{ $('#foodRow').classList.remove('show'); post('/api/pet/feed',{food:b.dataset.food}); });
 document.querySelectorAll('[data-toy]').forEach(b=>b.onclick=()=>{ $('#toys').classList.remove('show'); post('/api/pet/play',{toy:b.dataset.toy}); });
 $('#refresh').onclick=()=>load();
 function bar(label,v){ const c=v<25?'bad':v<50?'mid':''; return `<div class="bar">${label} ${v}<div><i class="${c}" style="width:${v}%"></i></div></div>`; }
@@ -95,7 +97,7 @@ async function load(){
     const p=s.pet; if(!p){ $('#status').textContent='Ember hasn’t checked in yet. Open the main screen.'; return; }
     $('#name').textContent=p.name; $('#mood').textContent=p.mood;
     const sess=p.session&&p.session.mode==='focus'?` · ${p.session.activity||'focus'} session, ${Math.max(0,Math.ceil((p.session.ends-Date.now())/60000))} min left`:'';
-    $('#status').innerHTML=(s.screen_online?`On the ${p.room} screen`:'<span class="off">No screen online</span>')+` · friendship ${p.friendship}${p.fires?` · <b class="off">${p.fires} fire${p.fires>1?'s':''}!</b>`:''}${p.misbehaving?' · <b>misbehaving</b>':''}${sess}`;
+    $('#status').innerHTML=(s.screen_online?`On the ${p.room} screen`:'<span class="off">No screen online</span>')+` · friendship ${p.friendship}${p.grudge>=5?` · grudge ${p.grudge}`:''}${p.fires?` · <b class="off">${p.fires} fire${p.fires>1?'s':''}!</b>`:''}${p.misbehaving?' · <b>misbehaving</b>':''}${sess}`;
     $('#bars').innerHTML=bar('Fuel',p.stats.fuel)+bar('Joy',p.stats.joy)+bar('Rest',p.stats.rest)+bar('Tidy',p.stats.tidy);
     $('#sprayB').disabled=!(p.fires||p.misbehaving); $('#sleepB').textContent=p.asleep?'Wake':'Sleep';
     $('#devs').innerHTML=s.devices.filter(d=>CTRL.includes(d.entity_id.split('.')[0])).map(d=>{ const dom=d.entity_id.split('.')[0], on=['on','open','unlocked'].includes(d.state);

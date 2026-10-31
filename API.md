@@ -25,13 +25,15 @@ Base URL: `http://<pi-address>:8080`. CORS is open, so any web page on your netw
 
 | Action | Body | Notes |
 |---|---|---|
-| `feed` | | Refused if Ember is full or busy |
+| `feed` | `{"food":"log"\|"pinecone"\|"pepper"}` | Refused if Ember is full or busy. A **pepper** sends Ember into a wild frenzy |
 | `play` | `{"toy":"ball"\|"bubbles"\|"music"\|"feather"}` | Refused if Ember is hungry, sleepy or misbehaving |
 | `pet` | | Hearts. Doesn't work while Ember is sulking |
 | `tidy` | | Ember hates it. Refused while a fire is burning |
 | `sleep` / `wake` | | `wake` is refused during a focus session |
 | `spray` | | Puts out the biggest fire, or squirts Ember if it's misbehaving |
 | `mischief` | | Makes Ember misbehave now, if mischief is turned on |
+
+`GET /api/state` also shows `pet.grudge` (0–100) and `pet.chaos`, how close Ember is to its next misbehaving, in %.
 
 ## Karaoke queue
 
