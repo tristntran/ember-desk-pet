@@ -1,0 +1,19 @@
+[package]
+name = "ember-core"
+version = "0.3.0"
+edition = "2021"
+description = "Ember's brain: stats, moods, mischief, fires, focus sessions. No I/O; the server and the browser both run it."
+license = "MIT"
+
+[lib]
+crate-type = ["rlib", "cdylib"]   # cdylib = the WebAssembly build for the browser
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

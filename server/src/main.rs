@@ -1,8 +1,9 @@
 //! Ember desk pet: home server.
 //!
-//! Serves the screens (index.html) and the phone remote (/remote), keeps Ember's state on disk,
-//! exposes a small JSON API, bridges to Home Assistant (the token never leaves this machine),
-//! and relays the MTA subway feeds for the porch train board.
+//! Runs Ember. The brain (ember-core) lives here, in memory: one Ember for the whole house.
+//! Screens and phones are windows onto it: they send actions and get live updates pushed to them
+//! (Server-Sent Events on /api/stream). It also serves the pages, bridges to Home Assistant
+//! (the token never leaves this machine) and relays the MTA subway feeds for the porch train board.
 //!
 //! LAN only by design:
 //!   * requests from addresses outside your local network are refused;
@@ -21,6 +22,9 @@ use std::fs;
 use std::io::{Cursor, Read};
 use std::net::{IpAddr, ToSocketAddrs, UdpSocket};
 use std::path::PathBuf;
+use ember_core::{Brain, Local};
+use std::io::Write;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -49,10 +53,9 @@ const STATIC_FILES: &[(&str, &str, &str)] = &[
     ("/remote.html", "remote.html", "text/html; charset=utf-8"),
     ("/config.local.js", "config.local.js", "text/javascript; charset=utf-8"),
     ("/vendor/qrcode.js", "vendor/qrcode.js", "text/javascript; charset=utf-8"),
+    ("/brain.js", "brain.js", "text/javascript; charset=utf-8"),
 ];
 const MTA_CACHE: Duration = Duration::from_secs(20);
-const LEASE_SECONDS: f64 = 10.0;
-const ACTION_TTL: f64 = 120.0;
 const MAX_BODY: u64 = 2_000_000;
 
 // ---------------------------------------------------------------------------------------------
@@ -396,72 +399,73 @@ fn ha_err(e: ureq::Error) -> String {
 }
 
 // ---------------------------------------------------------------------------------------------
+// local clock (the Pi's timezone) for bedtime and "favourite toy of the day"
+// ---------------------------------------------------------------------------------------------
+fn local_now() -> Local {
+    let t = unsafe { libc::time(std::ptr::null_mut()) };
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    if unsafe { libc::localtime_r(&t, &mut tm) }.is_null() { return Local { hour: 12.0, mday: 1 }; }
+    Local { hour: tm.tm_hour as f64 + tm.tm_min as f64 / 60.0 + tm.tm_sec as f64 / 3600.0, mday: tm.tm_mday as u32 }
+}
+fn now_ms() -> f64 { now() * 1000.0 }
+
+// ---------------------------------------------------------------------------------------------
 // app state
 // ---------------------------------------------------------------------------------------------
-struct Store {
-    full: Value,
-    summary: Value,
-    updated: f64,
-    karaoke: Value,
-    queue: Vec<Value>,
-    lease_id: String,
-    lease_room: Value,
-    lease_until: f64,
-    last_disk: f64,
-}
-
-impl Store {
-    fn leader_alive(&self) -> bool {
-        !self.lease_id.is_empty() && self.lease_until > now()
-    }
-    fn expire(&mut self) {
-        let t = now();
-        for a in self.queue.iter_mut() {
-            if a["status"] == "pending" && t - a["created"].as_f64().unwrap_or(t) > ACTION_TTL {
-                a["status"] = json!("expired");
-                a["result"] = json!({"ok": false, "msg": "No Ember screen picked this up"});
-            }
-        }
-        let n = self.queue.len();
-        if n > 200 {
-            self.queue.drain(..n - 200);
-        }
-    }
-    fn enqueue(&mut self, action: Value, by: &str) -> String {
-        let id = rand_hex(10);
-        self.queue.push(json!({"id": id, "created": now(), "action": action, "status": "pending", "result": null,
-                               "by": by.chars().take(24).collect::<String>()}));
-        id
-    }
-}
-
 struct App {
     cfg: Settings,
     ha: Arc<Ha>,
-    store: Mutex<Store>,
+    brain: Mutex<Brain>,
+    karaoke: Mutex<Value>,
+    subs: Mutex<Vec<Sender<Arc<String>>>>,
+    sent_seq: Mutex<u64>,
+    last_disk: Mutex<f64>,
     mta: Mutex<HashMap<String, (Instant, Vec<u8>)>>,
     web: ureq::Agent,
 }
 
 impl App {
-    fn save(&self, st: &mut Store, force: bool) {
-        if !force && now() - st.last_disk < 10.0 {
-            return;
-        }
-        st.last_disk = now();
-        let data = json!({"full": st.full, "summary": st.summary, "updated": st.updated, "karaoke": st.karaoke});
+    fn save(&self, force: bool) {
+        let mut last = lock(&self.last_disk);
+        if !force && now() - *last < 10.0 { return; }
+        *last = now();
+        let data = json!({"brain": lock(&self.brain).export(), "karaoke": *lock(&self.karaoke)});
         let tmp = self.cfg.state_file.with_extension("json.tmp");
         if fs::write(&tmp, data.to_string()).and_then(|_| fs::rename(&tmp, &self.cfg.state_file)).is_err() {
             eprintln!("!! couldn't write {}", self.cfg.state_file.display());
         }
     }
 
+    /// One message for every screen: the current state plus anything that just happened.
+    fn message(&self, since: Option<u64>) -> (String, u64) {
+        let b = lock(&self.brain);
+        let local = local_now();
+        let snap = b.snapshot(local);
+        let seq = b.s.seq;
+        let events = match since { Some(s) => serde_json::to_value(b.events_since(s)).unwrap_or_default(), None => json!([]) };
+        (json!({"state": snap, "events": events}).to_string(), seq)
+    }
+
+    /// Push the latest state + new events to every connected screen.
+    fn broadcast(&self) {
+        let mut sent = lock(&self.sent_seq);
+        let (msg, seq) = self.message(Some(*sent));
+        *sent = seq;
+        let msg = Arc::new(msg);
+        lock(&self.subs).retain(|tx| tx.send(msg.clone()).is_ok());
+    }
+
+    fn act(&self, action: Value) -> Value {
+        let res = lock(&self.brain).act(&action, now_ms(), local_now());
+        self.broadcast();
+        self.save(false);
+        res
+    }
+
     fn mta(&self, feed: &str) -> Result<Vec<u8>, String> {
         let mut cache = lock(&self.mta);
         if let Some((t, body)) = cache.get(feed) {
-            if t.elapsed() < MTA_CACHE {
-                return Ok(body.clone());
-            }
+            if t.elapsed() < MTA_CACHE { return Ok(body.clone()); }
         }
         let resp = self.web.get(&format!("{MTA_BASE}{feed}")).set("User-Agent", "ember-desk-pet").call().map_err(|e| e.to_string())?;
         let mut body = Vec::new();
@@ -492,15 +496,18 @@ fn header<'a>(req: &'a Request, name: &'static str) -> Option<&'a str> {
     req.headers().iter().find(|h| h.field.equiv(name)).map(|h| h.value.as_str())
 }
 
-fn handle(app: &App, req: &mut Request) -> Resp {
-    // ---- LAN-only gate ----
+/// LAN-only gate, applied to every request (including the live stream).
+fn gate(app: &App, req: &Request) -> Option<Resp> {
     let peer_ok = req.remote_addr().map(|a| is_local_ip(a.ip())).unwrap_or(false);
-    if !peer_ok {
-        return err(403, "Ember only talks to your local network");
-    }
+    if !peer_ok { return Some(err(403, "Ember only talks to your local network")); }
     if !host_ok(header(req, "Host").unwrap_or(""), &app.cfg.hostnames) {
-        return err(403, "unknown host name (add it to EMBER_HOSTNAMES if it's yours)");
+        return Some(err(403, "unknown host name (add it to EMBER_HOSTNAMES if it's yours)"));
     }
+    None
+}
+
+fn handle(app: &App, req: &mut Request) -> Resp {
+    if let Some(r) = gate(app, req) { return r; }
     let url = req.url().to_string();
     let (path, query) = url.split_once('?').unwrap_or((&url, ""));
     let path = path.to_string();
@@ -534,15 +541,31 @@ fn handle(app: &App, req: &mut Request) -> Resp {
     get(app, &path, query)
 }
 
-fn get(app: &App, p: &str, query: &str) -> Resp {
+/// Live updates: `text/event-stream`, one `data:` line per change, a comment every 15 s to keep it open.
+fn stream(app: Arc<App>, req: Request) {
+    let (tx, rx): (Sender<Arc<String>>, Receiver<Arc<String>>) = mpsc::channel();
+    let (first, _) = app.message(None);
+    lock(&app.subs).push(tx);
+    thread::spawn(move || {
+        let mut w = req.into_writer();
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\nConnection: keep-alive\r\nX-Accel-Buffering: no\r\n\r\n";
+        if w.write_all(head.as_bytes()).and_then(|_| w.write_all(format!("retry: 2000\ndata: {first}\n\n").as_bytes())).and_then(|_| w.flush()).is_err() { return; }
+        loop {
+            let chunk = match rx.recv_timeout(Duration::from_secs(15)) {
+                Ok(msg) => format!("data: {msg}\n\n"),
+                Err(mpsc::RecvTimeoutError::Timeout) => ": still here\n\n".to_string(),
+                Err(_) => return,
+            };
+            if w.write_all(chunk.as_bytes()).and_then(|_| w.flush()).is_err() { return; }
+        }
+    });
+}
+
+fn get(app: &App, p: &str, _query: &str) -> Resp {
     let ha = &app.ha;
     if let Some(feed) = p.strip_prefix("/mta/") {
-        if !app.cfg.trains {
-            return err(404, "trains are turned off in ember.json");
-        }
-        if !FEEDS.contains(&feed) {
-            return err(404, "unknown feed");
-        }
+        if !app.cfg.trains { return err(404, "trains are turned off in ember.json"); }
+        if !FEEDS.contains(&feed) { return err(404, "unknown feed"); }
         return match app.mta(feed) {
             Ok(b) => Response::from_data(b).with_header(hdr("Content-Type", "application/x-protobuf")),
             Err(e) => err(502, e),
@@ -561,55 +584,24 @@ fn get(app: &App, p: &str, query: &str) -> Resp {
         "/api/config" => {
             let status = lock(&ha.live).1.clone();
             return reply(200, json!({"ha": {"configured": ha.configured(), "status": status},
-                                     "devices": ha.devices, "ember": ha.ember, "trains": app.cfg.trains}));
+                                     "devices": ha.devices, "ember": ha.ember, "trains": app.cfg.trains, "brain": true}));
         }
         "/api/ha/states" => {
             let live = lock(&ha.live);
             return reply(200, json!({"configured": ha.configured(), "status": live.1, "entities": live.0}));
         }
-        "/api/ping" => return reply(200, json!({"ok": true, "screen_online": lock(&app.store).leader_alive()})),
+        "/api/ping" => return reply(200, json!({"ok": true, "brain": true})),
+        "/api/brain" => return reply(200, serde_json::from_str(&app.message(None).0).unwrap_or_default()),
+        "/api/log" => return reply(200, lock(&app.brain).log()),
         "/api/state" => {
-            let devices = if ha.configured() { Some(ha.device_list()) } else { None };
-            let st = lock(&app.store);
-            let mut out = json!({
-                "pet": st.summary["pet"], "devices": devices.map(Value::from).unwrap_or_else(|| st.summary["devices"].clone()),
-                "updated": st.updated, "screen_online": st.leader_alive(), "screen_room": st.lease_room});
-            if out["devices"].is_null() {
-                out["devices"] = json!([]);
-            }
-            if query.split('&').any(|kv| kv == "full" || kv.starts_with("full=")) {
-                out["full"] = st.full.clone();
-            }
-            return reply(200, out);
+            let devices = if ha.configured() { ha.device_list() } else { vec![] };
+            let pet = lock(&app.brain).summary();
+            return reply(200, json!({"pet": pet, "devices": devices, "updated": now()}));
         }
-        "/api/karaoke" => return reply(200, lock(&app.store).karaoke.clone()),
-        "/api/queue/next" => {
-            let sid = query.split('&').find_map(|kv| kv.strip_prefix("id=")).unwrap_or("");
-            let mut st = lock(&app.store);
-            if sid.is_empty() || sid != st.lease_id {
-                return reply(200, json!([]));
-            }
-            st.expire();
-            let mut todo = vec![];
-            for a in st.queue.iter_mut().filter(|a| a["status"] == "pending") {
-                a["status"] = json!("running");
-                todo.push(a.clone());
-            }
-            return reply(200, Value::Array(todo));
-        }
+        "/api/karaoke" => return reply(200, lock(&app.karaoke).clone()),
         _ => {}
     }
-    if let Some(aid) = p.strip_prefix("/api/actions/") {
-        let mut st = lock(&app.store);
-        st.expire();
-        return match st.queue.iter().find(|a| a["id"] == aid) {
-            Some(a) => reply(200, a.clone()),
-            None => err(404, "unknown action id"),
-        };
-    }
-    if p.starts_with("/api/") {
-        return err(404, "not found");
-    }
+    if p.starts_with("/api/") { return err(404, "not found"); }
     // ---- static files: only the page files, never state/config/source ----
     if let Some((_, file, ctype)) = STATIC_FILES.iter().find(|(u, _, _)| *u == p) {
         return match fs::read(app.cfg.dir.join(file)) {
@@ -625,84 +617,48 @@ fn post(app: &App, p: &str, body: &Value) -> Resp {
     let by = if by.is_empty() { "Someone".to_string() } else { by };
     let ha = &app.ha;
 
-    // ---- screen <-> server plumbing ----
-    if p == "/api/lease" {
-        let sid = clean(body.get("id"), 64);
-        let mut st = lock(&app.store);
-        if !sid.is_empty() && (!st.leader_alive() || st.lease_id == sid) {
-            st.lease_id = sid.clone();
-            st.lease_room = body["room"].clone();
-            st.lease_until = now() + LEASE_SECONDS;
-        }
-        return reply(200, json!({"leader": st.lease_id, "you": st.lease_id == sid}));
-    }
-    if p == "/api/state" {
-        let mut st = lock(&app.store);
-        if s(&body["id"]) != st.lease_id || st.lease_id.is_empty() {
-            return err(409, "only the screen running Ember can save state");
-        }
-        st.full = body["full"].clone();
-        st.summary = body["summary"].clone();
-        st.updated = now();
-        app.save(&mut st, false);
-        return reply(200, json!({"ok": true}));
-    }
-    if let Some(aid) = p.strip_prefix("/api/actions/").and_then(|r| r.strip_suffix("/done")) {
-        let mut st = lock(&app.store);
-        let found = st.queue.iter_mut().find(|a| a["id"] == aid).map(|a| {
-            a["status"] = json!("done");
-            a["result"] = body["result"].clone();
-        });
-        return reply(200, json!({"ok": found.is_some()}));
+    // ---- screens: any brain action ----
+    if p == "/api/act" {
+        let Some(action) = body.get("action").filter(|a| a.is_object()) else { return err(400, "send {\"action\":{\"type\":...}}") };
+        let res = app.act(action.clone());
+        return reply(if res["ok"] == true { 200 } else { 409 }, res);
     }
 
-    // ---- pet interactions ----
+    // ---- pet interactions (friendly API for phones and scripts) ----
     if let Some(action) = p.strip_prefix("/api/pet/") {
-        if !PET_ACTIONS.contains(&action) {
-            return err(400, format!("unknown action; try one of {PET_ACTIONS:?}"));
-        }
+        if !PET_ACTIONS.contains(&action) { return err(400, format!("unknown action; try one of {PET_ACTIONS:?}")); }
         let toy = &body["toy"];
-        if action == "play" && !toy.is_null() && !TOYS.contains(&s(toy)) {
-            return err(400, format!("unknown toy; try one of {TOYS:?}"));
-        }
+        if action == "play" && !toy.is_null() && !TOYS.contains(&s(toy)) { return err(400, format!("unknown toy; try one of {TOYS:?}")); }
         let food = &body["food"];
-        if action == "feed" && !food.is_null() && !FOODS.contains(&s(food)) {
-            return err(400, format!("unknown food; try one of {FOODS:?}"));
-        }
-        let mut st = lock(&app.store);
-        let id = st.enqueue(json!({"type": "pet", "action": action, "toy": toy, "food": food}), &by);
-        return reply(202, json!({"queued": id, "screen_online": st.leader_alive(), "check": format!("/api/actions/{id}")}));
+        if action == "feed" && !food.is_null() && !FOODS.contains(&s(food)) { return err(400, format!("unknown food; try one of {FOODS:?}")); }
+        let mut a = json!({"type": action, "by": by, "screen": "api"});
+        if !toy.is_null() { a["toy"] = toy.clone(); }
+        if !food.is_null() { a["food"] = food.clone(); }
+        if action == "play" { a["screen"] = json!(""); }   // no screen runs the mini-game: Ember plays on its own
+        let res = app.act(a);
+        return reply(if res["ok"] == true { 200 } else { 409 }, res);
     }
 
-    // ---- karaoke queue (kept here; works with no screen on) ----
+    // ---- karaoke queue ----
     if let Some(op) = p.strip_prefix("/api/karaoke/") {
-        let mut st = lock(&app.store);
-        let mut k = st.karaoke.clone();
-        if !k["queue"].is_array() {
-            k = json!({"current": null, "queue": []});
-        }
+        let mut k = lock(&app.karaoke);
+        if !k["queue"].is_array() { *k = json!({"current": null, "queue": []}); }
         let mut out = match op {
             "join" => {
                 let name = clean(body.get("name"), 24);
-                if name.is_empty() {
-                    return err(400, "name is required");
-                }
+                if name.is_empty() { return err(400, "name is required"); }
                 let entry = json!({"id": rand_hex(8), "name": name, "song": clean(body.get("song"), 60), "added": now()});
                 let q = k["queue"].as_array_mut().expect("array");
                 q.push(entry.clone());
                 let n = q.len();
-                if n > 50 {
-                    q.drain(..n - 50);
-                }
+                if n > 50 { q.drain(..n - 50); }
                 let pos = k["queue"].as_array().map_or(0, |q| q.len()) + usize::from(!k["current"].is_null());
                 json!({"ok": true, "entry": entry, "position": pos})
             }
             "next" => {
                 let q = k["queue"].as_array_mut().expect("array");
                 let mut cur = if q.is_empty() { Value::Null } else { q.remove(0) };
-                if cur.is_object() {
-                    cur["started"] = json!(now());
-                }
+                if cur.is_object() { cur["started"] = json!(now()); }
                 k["current"] = cur.clone();
                 json!({"ok": true, "current": cur})
             }
@@ -712,29 +668,21 @@ fn post(app: &App, p: &str, body: &Value) -> Resp {
                 let before = q.len();
                 q.retain(|e| e["id"] != rid);
                 let mut changed = before != q.len();
-                if !k["current"].is_null() && k["current"]["id"] == rid {
-                    k["current"] = Value::Null;
-                    changed = true;
-                }
+                if !k["current"].is_null() && k["current"]["id"] == rid { k["current"] = Value::Null; changed = true; }
                 json!({"ok": changed})
             }
-            "clear" => {
-                k = json!({"current": null, "queue": []});
-                json!({"ok": true})
-            }
+            "clear" => { *k = json!({"current": null, "queue": []}); json!({"ok": true}) }
             _ => return err(400, "use join, next, remove or clear"),
         };
-        st.karaoke = k.clone();
-        app.save(&mut st, true);
-        out["karaoke"] = k;
+        out["karaoke"] = k.clone();
+        drop(k);
+        app.save(true);
         return reply(200, out);
     }
 
     // ---- Home Assistant (screens use this) ----
     if p == "/api/ha/call" {
-        if !ha.configured() {
-            return err(503, "Home Assistant isn't set up in ember.json");
-        }
+        if !ha.configured() { return err(503, "Home Assistant isn't set up in ember.json"); }
         let data = if body["data"].is_object() { body["data"].clone() } else { json!({}) };
         return match ha.call(s(&body["domain"]), s(&body["service"]), &data) {
             Ok(()) => reply(200, json!({"ok": true})),
@@ -751,34 +699,18 @@ fn post(app: &App, p: &str, body: &Value) -> Resp {
         if !app.cfg.api_domains.iter().any(|d| d == dom) {
             return err(403, format!("'{dom}' devices aren't controllable over the API (EMBER_API_DOMAINS)"));
         }
-        if !DEVICE_SERVICES.contains(&service) {
-            return err(400, format!("unknown service; try one of {DEVICE_SERVICES:?}"));
+        if !DEVICE_SERVICES.contains(&service) { return err(400, format!("unknown service; try one of {DEVICE_SERVICES:?}")); }
+        if !ha.configured() { return err(503, "Home Assistant isn't set up in ember.json (demo devices live on each screen)"); }
+        if ha.device(entity).is_none() {
+            let known: Vec<&str> = ha.devices.iter().map(|d| s(&d["entity_id"])).collect();
+            return reply(404, json!({"error": "unknown device", "known": known}));
         }
-        if ha.configured() {
-            if ha.device(entity).is_none() {
-                let known: Vec<&str> = ha.devices.iter().map(|d| s(&d["entity_id"])).collect();
-                return reply(404, json!({"error": "unknown device", "known": known}));
-            }
-            let calls = match ha.translate(entity, service, body) {
-                Ok(c) => c,
-                Err(e) => return err(400, e),
-            };
-            for (d, sv, data) in calls {
-                if let Err((c, m)) = ha.call(&d, &sv, &data) {
-                    return err(c, m);
-                }
-            }
-            return reply(200, json!({"ok": true, "by": by}));
+        let calls = match ha.translate(entity, service, body) { Ok(c) => c, Err(e) => return err(400, e) };
+        for (d, sv, data) in calls {
+            if let Err((c, m)) = ha.call(&d, &sv, &data) { return err(c, m); }
         }
-        // demo mode: hand it to the screen running Ember
-        let mut st = lock(&app.store);
-        let known: Vec<String> = st.summary["devices"].as_array().into_iter().flatten().map(|d| s(&d["entity_id"]).to_string()).collect();
-        if !known.is_empty() && !known.iter().any(|k| k == entity) {
-            return reply(404, json!({"error": "unknown entity", "known": known}));
-        }
-        let data: Map<String, Value> = DATA_KEYS.iter().filter_map(|k| body.get(*k).map(|v| (k.to_string(), v.clone()))).collect();
-        let id = st.enqueue(json!({"type": "device", "entity_id": entity, "service": service, "data": data}), &by);
-        return reply(202, json!({"queued": id, "screen_online": st.leader_alive(), "check": format!("/api/actions/{id}")}));
+        let _ = DATA_KEYS; // (kept for reference: the body keys translate() reads)
+        return reply(200, json!({"ok": true, "by": by}));
     }
     err(404, "not found")
 }
@@ -788,10 +720,7 @@ fn main() {
     let dir = PathBuf::from(env("EMBER_DIR", "."));
     let config_file = PathBuf::from(env("EMBER_CONFIG", &dir.join("ember.json").to_string_lossy()));
     let cfg_json: Value = match fs::read_to_string(&config_file) {
-        Ok(t) => serde_json::from_str(&t).unwrap_or_else(|e| {
-            eprintln!("!! {} isn't valid JSON: {e}", config_file.display());
-            json!({})
-        }),
+        Ok(t) => serde_json::from_str(&t).unwrap_or_else(|e| { eprintln!("!! {} isn't valid JSON: {e}", config_file.display()); json!({}) }),
         Err(_) => json!({}),
     };
     let settings = Settings {
@@ -815,60 +744,62 @@ fn main() {
                 thread::spawn(move || h.poll_loop());
                 println!("Home Assistant: {}  ({} devices from {})", ha.url, ha.devices.len(), config_file.display());
             }
-            Err(e) => {
-                eprintln!("!! Home Assistant bridge disabled: {e}");
-                lock(&ha.live).1 = e;
-            }
+            Err(e) => { eprintln!("!! Home Assistant bridge disabled: {e}"); lock(&ha.live).1 = e; }
         }
     } else {
         println!("Home Assistant: not set up (demo devices). Copy ember.example.json to ember.json to connect.");
     }
 
-    let mut store = Store {
-        full: Value::Null, summary: Value::Null, updated: 0.0, karaoke: json!({"current": null, "queue": []}),
-        queue: vec![], lease_id: String::new(), lease_room: Value::Null, lease_until: 0.0, last_disk: 0.0,
-    };
-    if let Ok(saved) = fs::read_to_string(&settings.state_file).map(|t| serde_json::from_str::<Value>(&t).unwrap_or_default()) {
-        store.full = saved["full"].clone();
-        store.summary = saved["summary"].clone();
-        store.updated = saved["updated"].as_f64().unwrap_or(0.0);
-        if saved["karaoke"].is_object() {
-            store.karaoke = saved["karaoke"].clone();
-        }
-    }
+    // Ember's saved state ("brain"; older servers saved the page's state as "full")
+    let saved: Value = fs::read_to_string(&settings.state_file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+    let brain_state = [&saved["brain"], &saved["full"]].into_iter().find(|v| v.is_object()).cloned();
+    let brain = Brain::new(brain_state, now_ms());
+    let karaoke = if saved["karaoke"].is_object() { saved["karaoke"].clone() } else { json!({"current": null, "queue": []}) };
 
     let addr = format!("{}:{}", settings.host, settings.port);
-    let server = Arc::new(Server::http(&addr).unwrap_or_else(|e| {
-        eprintln!("!! can't listen on {addr}: {e}");
-        std::process::exit(1)
-    }));
+    let server = Arc::new(Server::http(&addr).unwrap_or_else(|e| { eprintln!("!! can't listen on {addr}: {e}"); std::process::exit(1) }));
     println!("Ember is running on your local network: {}", lan_url(settings.port));
+    println!("  {} is {} (friendship {})", brain.s.name, brain.mood(), brain.level());
     println!("  API: /api   remote: /remote   controllable device domains: {}", settings.api_domains.join(", "));
-    println!(
-        "  Internet: {}",
-        if settings.trains { "only the MTA train feed (api-endpoint.mta.info). Set \"trains\": false in ember.json for none." } else { "none (trains off)" }
-    );
+    println!("  Internet: {}", if settings.trains { "only the MTA train feed (api-endpoint.mta.info). Set \"trains\": false in ember.json for none." } else { "none (trains off)" });
 
+    let seq = brain.s.seq;
     let app = Arc::new(App {
-        cfg: settings,
-        ha,
-        store: Mutex::new(store),
-        mta: Mutex::new(HashMap::new()),
-        web: ureq::AgentBuilder::new().timeout(Duration::from_secs(10)).build(),
+        cfg: settings, ha, brain: Mutex::new(brain), karaoke: Mutex::new(karaoke), subs: Mutex::new(vec![]), sent_seq: Mutex::new(seq),
+        last_disk: Mutex::new(0.0), mta: Mutex::new(HashMap::new()), web: ureq::AgentBuilder::new().timeout(Duration::from_secs(10)).build(),
     });
 
-    let workers: Vec<_> = (0..6)
+    // Ember's heartbeat: advance the brain, push to screens once a second (sooner when something happens)
+    {
+        let app = app.clone();
+        thread::spawn(move || {
+            let mut beat = 0u32;
+            loop {
+                thread::sleep(Duration::from_millis(250));
+                let before = { let mut b = lock(&app.brain); let s = b.s.seq; b.tick(now_ms(), local_now()); s };
+                beat += 1;
+                let changed = lock(&app.brain).s.seq != before;
+                if changed || beat.is_multiple_of(4) { app.broadcast(); }
+                app.save(false);
+            }
+        });
+    }
+
+    let workers: Vec<_> = (0..8)
         .map(|_| {
             let (server, app) = (server.clone(), app.clone());
             thread::spawn(move || {
                 for mut req in server.incoming_requests() {
+                    let is_stream = req.method() == &Method::Get && req.url().split('?').next() == Some("/api/stream");
+                    if is_stream {
+                        match gate(&app, &req) { Some(r) => { let _ = req.respond(r); } None => stream(app.clone(), req) }
+                        continue;
+                    }
                     let resp = handle(&app, &mut req);
                     let _ = req.respond(resp);
                 }
             })
         })
         .collect();
-    for w in workers {
-        let _ = w.join();
-    }
+    for w in workers { let _ = w.join(); }
 }

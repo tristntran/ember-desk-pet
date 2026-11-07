@@ -1,7 +1,7 @@
 name: Build server
 on:
   push:
-    paths: ["server/**", ".github/workflows/server.yml"]
+    paths: ["server/**", "core/**", ".github/workflows/server.yml"]
     tags: ["v*"]
   workflow_dispatch:
 permissions:

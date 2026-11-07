@@ -1,0 +1,28 @@
+name: Build brain (WebAssembly)
+# Compiles core/ to WebAssembly and commits brain.js, so the page works with no server and no build step.
+on:
+  push:
+    branches: [main]
+    paths: ["core/**", "tools/make_brain_js.py", ".github/workflows/brain.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: { group: brain, cancel-in-progress: true }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-unknown-unknown }
+      - run: cd core && cargo test
+      - run: cd core && cargo build --release --lib --target wasm32-unknown-unknown
+      - run: python3 tools/make_brain_js.py core/target/wasm32-unknown-unknown/release/ember_core.wasm > brain.js
+      - name: Commit brain.js
+        run: |
+          if git diff --quiet -- brain.js && git ls-files --error-unmatch brain.js >/dev/null 2>&1; then echo "brain.js unchanged"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add brain.js
+          git commit -m "Rebuild brain.js from core/"
+          git pull --rebase origin main && git push
