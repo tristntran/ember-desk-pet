@@ -1438,7 +1438,7 @@ function drawEmber(c,t){
     if(!inside(dx,dy)) continue; let col;
     if(!inside(dx-1,dy)||!inside(dx+1,dy)||!inside(dx,dy-1)||!inside(dx,dy+1)) col=C.o;
     else { const nx=(dx+0.5)/hw, ny=((dy+0.5)+hh/2)/(hh/2);
-      if(nx*nx*2.2+(ny-0.45)**2*4<0.42) col=C.belly; else if(-nx*0.6-ny*0.8>0.5) col=C.l; else if(ny>0.62||nx>0.78) col=C.d; else col=C.b;
+      if(-nx*0.6-ny*0.8>0.5) col=C.l; else if(ny>0.62||nx>0.78) col=C.d; else col=C.b;
       if(k<0.5 && hash(dx+Math.floor(t*6),dy)>0.985) col='#fff4b0';
       if(k>0.4 && hash(dx*3,dy*7)>0.86) col=mixA(col,crack,Math.min(1,(k-0.4)*1.8)); }   // glowing cracks in the coal
     c.fillStyle=col; c.fillRect(cx+dx,base+dy,1,1);
