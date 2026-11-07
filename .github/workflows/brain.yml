@@ -15,9 +15,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: wasm32-unknown-unknown }
-      - run: cd core && cargo test
-      - run: cd core && cargo build --release --lib --target wasm32-unknown-unknown
-      - run: python3 tools/make_brain_js.py core/target/wasm32-unknown-unknown/release/ember_core.wasm > brain.js
+      - run: cargo test -p ember-core
+      - run: cargo build --release -p ember-core --lib --target wasm32-unknown-unknown
+      - run: python3 tools/make_brain_js.py target/wasm32-unknown-unknown/release/ember_core.wasm > brain.js
       - name: Commit brain.js
         run: |
           if git diff --quiet -- brain.js && git ls-files --error-unmatch brain.js >/dev/null 2>&1; then echo "brain.js unchanged"; exit 0; fi

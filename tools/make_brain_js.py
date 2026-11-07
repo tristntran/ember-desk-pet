@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Wrap core/ (compiled to WebAssembly) into brain.js: one script tag, works from file:// and the artifact link.
-Usage: python3 tools/make_brain_js.py core/target/wasm32-unknown-unknown/release/ember_core.wasm > brain.js"""
+Usage: python3 tools/make_brain_js.py target/wasm32-unknown-unknown/release/ember_core.wasm > brain.js"""
 import base64, hashlib, sys
 wasm = open(sys.argv[1], 'rb').read()
 b64 = base64.b64encode(wasm).decode()

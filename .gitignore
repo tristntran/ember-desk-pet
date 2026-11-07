@@ -6,3 +6,4 @@ ember_state.json.tmp
 ember.json
 server/target/
 core/target/
+target/

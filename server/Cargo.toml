@@ -11,9 +11,3 @@ ureq = { version = "2", default-features = false, features = ["tls", "json"] }
 serde_json = "1"
 ember-core = { path = "../core" }
 libc = "0.2"
-
-[profile.release]
-opt-level = "z"
-lto = true
-codegen-units = 1
-strip = true
