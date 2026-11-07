@@ -430,6 +430,9 @@ pinecone:["...G...","..kNk..",".kNnNk.",".knNnk.","kNnNnNk",".knNnk.",".kNnNk.",
 spark:["..kkk..",".kyyyk.","kylyyok","kyyyyok","kyyyook",".koook.","..kkk.."],
 broom:["......kk",".....kNk","....kNk.","...kNk..","..kkk...",".kYYYk..","kYyYyYk.","kYyYyYk.","kkkkkkk."],
 moon:["...kkkk.","..kyyk..",".kyyk...","kyyyk...","kyyyk...","kyyyyk.k",".kyyyyyk","..kkkkk."],
+door:["kkkkkk","knnnnk","kNnnNk","knnnnk","knnnyk","kNnnNk","knnnnk","kkkkkk"],
+flame:["..k...",".kok..",".koyk.","koyyok","kyylyk","kyyyyk",".kkkk."],
+bed:["k.......","kccbk...","kccbbbbk","kbbbbbbk","kkkkkkkk","k......k"],
 house:["....k....","...kRk...","..kRrRk..",".kRrrrRk.","kkkkkkkkk",".knnnnnk.",".kcknNnk.",".kkknNnk.",".kkkkkkk."],
 gear:["...k.k...","..kSkSk..",".kSSSSSk.","kSSSkSSSk",".SSk.kSS.","kSSSkSSSk",".kSSSSSk.","..kSkSk..","...k.k..."],
 note:["..kkkkk","..k...k","..k...k","..k...k","kkk.kkk","kkk.kkk"],
@@ -1619,7 +1622,7 @@ function broomX(){ return mobile()?pet.cxD+pet.facing*7-4:sweepX(); }
    RENDER
    ===================================================================== */
 let staticLayer=null, staticKey='';
-function render(){
+function renderScene(){
   const season=seasonNow(), h=hourNow(), wx=wxNow(), dark=darkness(h);
   if(staticKey!==season+RID){ staticLayer=R.build(season); staticKey=season+RID; }
   ensureClouds(wx); ambient(1/30,wx,season,h);
@@ -1678,17 +1681,74 @@ function setRoom(id){
 }
 addEventListener('hashchange',()=>{ const h=roomFromHash(); if(h&&h!==RID){ setRoom(h); save(); } });
 
+/* ---- moving between rooms: corner signs, swipes, arrow keys ----
+   The house runs left to right:  Bedroom  ←  Living room (hearth)  →  Front door (porch). */
+const EXITS={
+  hearth: { left:{to:'bedroom',rect:[1,63,16,12]}, right:{to:'porch',rect:[143,63,16,12]} },
+  bedroom:{ right:{to:'hearth',rect:[143,63,16,12]} },
+  porch:  { left:{to:'hearth',rect:[1,37,16,12]} },          // above the train board
+};
+const EXIT_ICON={bedroom:'bed',hearth:'flame',porch:'door'};
+const HOME_RID=roomFromHash()||null;          // the room this screen lives in (from its #hash)
+let trans=null, exitFlash=null;
+const transOld=document.createElement('canvas'), transNew=document.createElement('canvas'); transOld.width=transNew.width=W; transOld.height=transNew.height=H;
+function exitAt(pt){ for(const [side,x] of Object.entries(EXITS[RID]||{})) if(inRect(pt,x.rect)) return {side,...x}; return null; }
+function goRoom(to,side){
+  if(trans||!ROOMS[to]||to===RID) return false;
+  const dir=side==='left'?-1:1;
+  lastInteract=Date.now(); sfx('ui');
+  transOld.getContext('2d').drawImage(cv,0,0);
+  setRoom(to); save();
+  trans={dir,t0:performance.now(),dur:480};
+  const tb=$('#trains'); tb.style.transition='none'; tb.style.opacity='0'; setTimeout(()=>{ tb.style.transition='opacity .3s'; tb.style.opacity=''; },500);
+  pet.facing=dir; pet.cxD=pet.x=R.anchor.x;
+  setTimeout(()=>{ burst(R.anchor.x,R.anchor.y-8,10,'ember'); if(!S.asleep){ say('sparkle',1.1); hop(40); } },420);   // Ember settles into its new form
+  return true;
+}
+function drawExits(c){
+  const pulse=0.8+0.15*Math.sin(T*2.4);
+  for(const [side,x] of Object.entries(EXITS[RID]||{})){
+    const [rx,ry,rw,rh]=x.rect, hot=exitFlash&&exitFlash.side===side&&performance.now()-exitFlash.t<250;
+    c.globalAlpha=hot?1:pulse;
+    c.fillStyle='#3a2210'; c.fillRect(rx+1,ry,rw-2,rh); c.fillRect(rx,ry+1,rw,rh-2);              // little rounded sign
+    c.fillStyle=hot?'#ffe08a':'#f3dfb4'; c.fillRect(rx+1,ry+1,rw-2,rh-2);
+    c.fillStyle='#c9a46a'; c.fillRect(rx+1,ry+rh-2,rw-2,1);
+    c.fillStyle='#3a2210';
+    const nudge=Math.round(Math.sin(T*3)*0.6+0.4)*(side==='left'?-1:1), ay=ry+Math.floor(rh/2);
+    const ax=side==='left'?rx+2+nudge:rx+rw-3+nudge, d=side==='left'?1:-1;   // chevron
+    for(let i=0;i<4;i++){ c.fillRect(ax+i*d,ay-i,1,1); c.fillRect(ax+i*d,ay+i,1,1); }
+    const m=MAPS[EXIT_ICON[x.to]]; drawMap(c,m,side==='left'?rx+rw-m.w-2:rx+2,ry+Math.round((rh-m.h)/2));
+    c.globalAlpha=1;
+  }
+}
+function drawTrans(){
+  if(!trans) return;
+  const p=Math.min(1,(performance.now()-trans.t0)/trans.dur), e=p<0.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+  const nc=transNew.getContext('2d'); nc.clearRect(0,0,W,H); nc.drawImage(cv,0,0);
+  const off=Math.round(e*W)*trans.dir;
+  ctx.clearRect(0,0,W,H); ctx.fillStyle='#000'; ctx.fillRect(0,0,W,H);
+  ctx.drawImage(transOld,-off,0); ctx.drawImage(transNew,trans.dir*W-off,0);
+  ctx.fillStyle='#000'; ctx.fillRect(trans.dir>0?W-off-1:-off,0,1,H);           // thin wall between rooms
+  if(p>=1) trans=null;
+}
+function render(){ renderScene(); drawExits(ctx); drawTrans(); }
+function swipeRoom(dx){ const ex=EXITS[RID]||{}, x=dx<0?ex.right:ex.left; if(x) return goRoom(x.to,dx<0?'right':'left'); return false; }
+addEventListener('keydown',e=>{ if(e.target.closest&&e.target.closest('input,textarea,select')) return; if(!document.querySelector('.overlay:not(.hidden)')){
+  if(e.key==='ArrowLeft'&&EXITS[RID].left) goRoom(EXITS[RID].left.to,'left'); if(e.key==='ArrowRight'&&EXITS[RID].right) goRoom(EXITS[RID].right.to,'right'); } });
+setInterval(()=>{ if(HOME_RID&&RID!==HOME_RID&&!trans&&Date.now()-lastInteract>180000){ const ex=Object.entries(EXITS[RID]||{}); const back=ex.find(([,x])=>x.to===HOME_RID)||ex[0]; if(back) goRoom(back[1].to,back[0]); } },5000);  // wander home after 3 idle minutes
+
 /* =====================================================================
    INPUT (scene)
    ===================================================================== */
 let ptr=null;
 function toScene(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H}; }
 function onPet(pt){ const b=pet.box; return pt.x>=b[0]&&pt.x<=b[2]&&pt.y>=b[1]&&pt.y<=b[3]; }
-cv.addEventListener('pointerdown',e=>{ const pt=toScene(e); if(feather){ feather.active=true; feather.x=pt.x; feather.y=pt.y; } ptr={start:pt,last:pt,dist:0,pet:onPet(pt)}; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointerdown',e=>{ const pt=toScene(e); if(feather){ feather.active=true; feather.x=pt.x; feather.y=pt.y; } ptr={start:pt,last:pt,dist:0,pet:onPet(pt),t:performance.now()}; cv.setPointerCapture(e.pointerId); });
 cv.addEventListener('pointermove',e=>{ if(!ptr) return; const pt=toScene(e); const d=Math.hypot(pt.x-ptr.last.x,pt.y-ptr.last.y); ptr.dist+=d; ptr.last=pt;
   if(feather){ feather.x=pt.x; feather.y=pt.y; if(d>0.5&&onPet(pt)) tickle(); return; }
   if(ptr.pet&&onPet(pt)){ pet.petAcc+=d; if(pet.petAcc>7){ pet.petAcc=0; strokePet(pt); } } });
-cv.addEventListener('pointerup',e=>{ if(feather) feather.active=false; if(!ptr) return; if(feather){ ptr=null; return; } const pt=toScene(e); const tap=ptr.dist<4; const wasPet=ptr.pet; ptr=null; if(tap) tapScene(pt,wasPet); });
+cv.addEventListener('pointerup',e=>{ if(feather) feather.active=false; if(!ptr) return; if(feather){ ptr=null; return; } const pt=toScene(e); const tap=ptr.dist<4; const wasPet=ptr.pet; const dx=pt.x-ptr.start.x, dy=pt.y-ptr.start.y, quick=performance.now()-ptr.t<700; ptr=null;
+  if(tap) tapScene(pt,wasPet); else if(!wasPet&&quick&&Math.abs(dx)>28&&Math.abs(dx)>2*Math.abs(dy)&&!aiming) swipeRoom(dx); });
 cv.addEventListener('pointercancel',()=>{ ptr=null; });
 function strokePet(pt){
   lastInteract=Date.now();
@@ -1712,6 +1772,7 @@ function tapScene(pt,wasPet){
     hop(70); pet.flare=1; burst(pet.cxD,pet.sparkY,8,'ember'); setExpr(Math.random()<0.5?'happy':'wow',1.4); pet.lookUser=2;
     say(['heart','note','bang','sparkle'][Math.floor(rand(0,4))],1.5); st().joy=clamp(st().joy+1,0,100); addFP(0.5); sfx('tap'); return;
   }
+  { const ex=exitAt(pt); if(ex){ exitFlash={side:ex.side,t:performance.now()}; goRoom(ex.to,ex.side); return; } }
   if(tapDog(pt)||tapWindowDog(pt)) return;
   for(const [prop,rect] of Object.entries(R.props)){ if(inRect(pt,rect)){ if(prop==='karaoke'){ openKaraoke(); return; } if(prop==='door'){ knockDoor(pt); return; } const id=RP(prop); const e=Home.get(id);
     if(e){ if(dom(id)==='sensor'||dom(id)==='weather') toast(`${e.attributes.friendly_name}: ${stateText(e)}`); else toggleEntity(id); spawn({type:'ring',x:pt.x,y:pt.y,life:0.35}); } return; } }

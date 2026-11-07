@@ -47,6 +47,8 @@ sudo cp server/ember.service /etc/systemd/system/ && sudo systemctl enable --now
 | `#bedroom` | a little candle | floor lamp, ceiling fan (the AC), fairy lights |
 | `#porch` | the porch lantern | porch-light switch, thermometer (+ subway board) |
 
+Getting around: tap the little signs in the bottom corners (bed = bedroom, flame = living room, door = front door), swipe left/right on the scene, or use the arrow keys. The house runs Bedroom ← Living room → Front door. A screen opened with a `#room` drifts back to that room after 3 idle minutes.
+
 ## Configure
 - Your devices, which prop controls what, and scenes: `ember.json` on the Pi (git-ignored, never served). See [HOME_ASSISTANT.md](HOME_ASSISTANT.md).
 - Look and behaviour (trains, focus sessions, mischief): `CONFIG` at the top of `index.html`, or override in `config.local.js` (git-ignored).
