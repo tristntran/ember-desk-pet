@@ -514,6 +514,7 @@ S.settings=Object.assign(fresh().settings,S.settings||{});
   else { st.fuel=clamp(st.fuel-mins*0.35,0,100); st.joy=clamp(st.joy-mins*0.4,0,100); st.rest=clamp(st.rest-mins*0.25,0,100); }
   st.tidy=clamp(st.tidy-mins*0.15,0,100); })();
 function save(){ S.last=Date.now(); if(!CONFIG.ha.enabled&&!(typeof NET!=='undefined'&&NET.ha)) S.ents=Object.values(Home.ents).map(e=>({entity_id:e.entity_id,state:e.state,attributes:e.attributes}));
+  if(typeof LOCAL!=='undefined'&&!NET.on&&LOCAL.on&&!LOCAL.leader) return;   // the main tab saves
   try{ localStorage.setItem(SAVE_KEY,JSON.stringify(S)); }catch(e){} }
 
 /* =====================================================================
@@ -1186,7 +1187,7 @@ function goSleep(){ if(S.asleep) return; if(pet.state==='mischief'){ aiming=fals
 function wake(byUser){ if(!S.asleep) return; S.asleep=false; setTimeout(updateTimer,0); pet.state='idle'; pet.think=2; hop(55); pet.flare=1.6; burst(pet.cxD,pet.sparkY,14,'ember');
   if(byUser&&st().rest<50){ setExpr('meh',2.2); say('moon',2); } else setExpr('happy',1.6); sfx('wake'); updateHUD(); }
 function actSleep(){
-  if(S.timer&&S.timer.mode==='focus') return stopTimer();
+  if(S.timer&&S.timer.mode==='focus'){ tabSend({type:'stop'}); return stopTimer(); }
   if(S.asleep) return wake(true);
   if(busy()) return toast(`${S.name} is busy`);
   openNapPick();
@@ -1216,7 +1217,8 @@ function openNapPick(){
 }
 $('#acts').addEventListener('click',e=>{ const b=e.target.closest('.act'); if(!b) return; pickAct=b.dataset.act2; sfx('ui'); openNapPick(); });
 $('#naps').addEventListener('click',e=>{ const b=e.target.closest('.nap'); if(!b) return; $('#napPick').classList.add('hidden'); const m=+b.dataset.min;
-  if(!m){ S.timer=null; goSleep(); } else startFocus(m,pickAct); });
+  if(!m){ S.timer=null; goSleep(); } else startFocus(m,pickAct);
+  tabSend({type:'session',m,act:pickAct}); });
 function runHA(list){ (list||[]).forEach(([d,sv,data])=>Home.call(d,sv,data||{})); }
 function startFocus(m,act=S.lastAct||'work'){
   S.lastNap=m; S.lastAct=act; pickAct=act; const now=Date.now();
@@ -1673,9 +1675,11 @@ function glow(x,y,r,col){ const g=ctx.createRadialGradient(x,y,0,x,y,r); g.addCo
    ROOMS — switching
    ===================================================================== */
 function setRoom(id){
+  const keep=pet.state==='mischief'?{misT:pet.misT,frenzy:pet.frenzy,squirtsNeeded:pet.squirtsNeeded,misAcc:pet.misAcc}:null;
   if(!ROOMS[id]) id='hearth'; RID=id; R=ROOMS[id]; S.settings.room=id;
   pet.x=pet.tx=R.anchor.x; pet.cxD=R.anchor.x; pet.ang=0; pet.angV=0; pet.hop=0; pet.hv=0; food=ball=broom=null; bubbles=[]; feather=null; music=null; pet.toy=null; pet.onArrive=null;
   aiming=false; blaze=false; $('#stage').classList.remove('blaze'); pet.state=S.asleep?'sleep':'idle'; if(S.timer&&S.timer.mode==='focus'&&S.timer.act&&S.timer.act!=='nap'&&!S.asleep){ pet.state='cowork'; pet.coT=0; pet.coBeat=0; } parts.length=0; setTimeout(setPlayMode,0); outParts.length=0; cloudsKey=''; staticKey='';
+  if(keep&&!S.asleep){ Object.assign(pet,keep); pet.state='mischief'; setExpr(pet.frenzy?'wow':'smug',30); }   // still up to no good in the new room
   render(); renderQuick(); updateHUD();
   if(typeof refreshTrains==='function'&&trainsShown()){ renderTrains(); refreshTrains(); }
 }
@@ -1708,16 +1712,16 @@ function goRoom(to,side){
 function drawExits(c){
   const pulse=0.8+0.15*Math.sin(T*2.4);
   for(const [side,x] of Object.entries(EXITS[RID]||{})){
-    const [rx,ry,rw,rh]=x.rect, hot=exitFlash&&exitFlash.side===side&&performance.now()-exitFlash.t<250;
+    const [rx,ry,rw,rh]=x.rect, hot=exitFlash&&exitFlash.side===side&&performance.now()-exitFlash.t<250, fire=S.fires.some(f=>f.room===x.to), alarm=fire&&Math.sin(T*8)>0;
     c.globalAlpha=hot?1:pulse;
     c.fillStyle='#3a2210'; c.fillRect(rx+1,ry,rw-2,rh); c.fillRect(rx,ry+1,rw,rh-2);              // little rounded sign
-    c.fillStyle=hot?'#ffe08a':'#f3dfb4'; c.fillRect(rx+1,ry+1,rw-2,rh-2);
+    c.globalAlpha=fire?1:c.globalAlpha; c.fillStyle=hot?'#ffe08a':(alarm?'#ff8a5a':'#f3dfb4'); c.fillRect(rx+1,ry+1,rw-2,rh-2);
     c.fillStyle='#c9a46a'; c.fillRect(rx+1,ry+rh-2,rw-2,1);
     c.fillStyle='#3a2210';
     const nudge=Math.round(Math.sin(T*3)*0.6+0.4)*(side==='left'?-1:1), ay=ry+Math.floor(rh/2);
     const ax=side==='left'?rx+2+nudge:rx+rw-3+nudge, d=side==='left'?1:-1;   // chevron
     for(let i=0;i<4;i++){ c.fillRect(ax+i*d,ay-i,1,1); c.fillRect(ax+i*d,ay+i,1,1); }
-    const m=MAPS[EXIT_ICON[x.to]]; drawMap(c,m,side==='left'?rx+rw-m.w-2:rx+2,ry+Math.round((rh-m.h)/2));
+    const m=MAPS[fire?'flame':EXIT_ICON[x.to]]; drawMap(c,m,side==='left'?rx+rw-m.w-2:rx+2,ry+Math.round((rh-m.h)/2));
     c.globalAlpha=1;
   }
 }
@@ -1817,7 +1821,7 @@ function renderQuick(){ $('#quick').innerHTML=CONFIG.rooms[RID].quick.map(id=>{ 
 $('#quick').addEventListener('click',e=>{ const b=e.target.closest('.chip'); if(b) toggleEntity(b.dataset.id); });
 
 document.querySelectorAll('#bar .btn[data-act]').forEach(b=>b.addEventListener('click',()=>{ lastInteract=Date.now();
-  ({feed:()=>{ if(pet.state==='cowork'||S.asleep||busy()) return actFeed(); openPantry(); },play:()=>{ if(pet.state==='mischief'||roomFires().length){ aiming=!aiming; setPlayMode(); if(aiming) toast(`Tap ${S.name} to squirt!`); sfx('ui'); return; } actPlay(); },tidy:()=>{ relay('tidy'); actTidy(); },sleep:()=>{ if(isFollower()&&!S.asleep&&!S.timer) return toast('Start sessions on the main screen'); if(isFollower()&&S.asleep) relay('wake'); actSleep(); },home:openHome})[b.dataset.act](); updateHUD(); }));
+  ({feed:()=>{ if(pet.state==='cowork'||S.asleep||busy()) return actFeed(); openPantry(); },play:()=>{ if(pet.state==='mischief'||roomFires().length){ aiming=!aiming; setPlayMode(); if(aiming) toast(`Tap ${S.name} to squirt!`); sfx('ui'); return; } actPlay(); },tidy:()=>{ relay('tidy'); actTidy(); },sleep:()=>{ if(NET.on&&isFollower()&&!S.asleep&&!S.timer) return toast('Start sessions on the main screen'); if(isFollower()&&S.asleep) relay('wake'); actSleep(); },home:openHome})[b.dataset.act](); updateHUD(); }));
 $('#sndBtn').addEventListener('click',()=>{ S.settings.sound=!S.settings.sound; sfx('ui'); updateHUD(); save(); });
 document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{ $('#'+b.dataset.close).classList.add('hidden'); sfx('ui'); save(); }));
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o){ o.classList.add('hidden'); save(); } }));
@@ -2170,7 +2174,34 @@ const NET={on:false,leader:false,id:Math.random().toString(36).slice(2,10),captu
 const SHARED=['name','stats','fp','grudge','chaos','chaosAt','asleep','fires','scorch','log','timer','sessions','lastTidy','lastNap','lastAct'];
 const VERB={feed:'fed',play:'is playing with',pet:'petted',tidy:'is tidying up after',sleep:'tucked in',wake:'woke up',spray:'sprayed',mischief:'egged on'};
 async function api(path,body){ const r=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'}); return r.json(); }
-const isFollower=()=>NET.on&&!NET.leader;
+/* Same browser, no Pi server (opened from a file or the artifact link in several tabs):
+   tabs elect one "main" tab over a BroadcastChannel. It runs Ember and shares its state every second;
+   the other tabs mirror it and pass what you do there to the main tab. With the server, NET does this instead. */
+const LOCAL={on:false,leader:false,since:Date.now(),heard:0,ch:null};
+const isFollower=()=>NET.on?!NET.leader:(LOCAL.on&&!LOCAL.leader);
+function tabSend(action){ if(!NET.on&&LOCAL.ch&&isFollower()) LOCAL.ch.postMessage({type:'act',by:`${S.name}'s other tab`,action}); }
+function localInit(){
+  if(typeof BroadcastChannel==='undefined') return;
+  try{ LOCAL.ch=new BroadcastChannel('ember-sync-'+SAVE_KEY); }catch(e){ return; }
+  LOCAL.on=true;
+  const share=()=>{ const full={}; for(const k of SHARED) full[k]=S[k]; return full; };
+  LOCAL.ch.onmessage=({data:m})=>{ if(!m||NET.on) return;
+    if(m.type==='state'){
+      if(LOCAL.leader){ if(m.since<LOCAL.since||(m.since===LOCAL.since&&m.id<NET.id)){ LOCAL.leader=false; } else return; }   // two main tabs: the older one wins
+      LOCAL.heard=Date.now(); adopt(m.full,m.activity);
+    }
+    else if(m.type==='hello'&&LOCAL.leader){ LOCAL.ch.postMessage({type:'state',id:NET.id,since:LOCAL.since,full:share(),activity:pet.state}); }
+    else if(m.type==='act'&&LOCAL.leader){ const a=m.action;
+      if(a.type==='session'){ if(a.m){ startFocus(a.m,a.act); } else { S.timer=null; goSleep(); } }
+      else if(a.type==='stop'){ if(S.timer&&S.timer.mode==='focus') stopTimer(); }
+      else runAction({action:a,by:m.by}); }
+  };
+  LOCAL.ch.postMessage({type:'hello'});
+  setInterval(()=>{ if(NET.on) return;
+    if(!LOCAL.leader&&Date.now()-LOCAL.heard>(LOCAL.heard?3000:600)){ LOCAL.leader=true; LOCAL.since=Date.now(); }   // nobody else is running Ember
+    if(LOCAL.leader){ S.last=Date.now(); LOCAL.ch.postMessage({type:'state',id:NET.id,since:LOCAL.since,full:share(),activity:pet.state}); }
+  },1000);
+}
 function netSummary(){ const s=st();
   return { pet:{ name:S.name, mood:moodText(), friendship:Math.floor(S.fp/100), stats:Object.fromEntries(Object.entries(s).map(([k,v])=>[k,Math.round(v)])),
       asleep:S.asleep, activity:pet.state, toy:pet.toy||null, room:RID, misbehaving:pet.state==='mischief',
@@ -2222,7 +2253,7 @@ async function runAction(a){
     }
   }catch(err){ ok=false; cap.push(String(err&&err.message||err)); }
   NET.capture=null;
-  try{ await api(`/api/actions/${a.id}/done`,{result:{ok,msg:cap.join(' ')||'ok'}}); }catch(e){}
+  if(NET.on&&a.id){ try{ await api(`/api/actions/${a.id}/done`,{result:{ok,msg:cap.join(' ')||'ok'}}); }catch(e){} }
   NET.lastPush=0;   // push fresh state right away
 }
 async function netTick(){
@@ -2241,7 +2272,8 @@ async function netTick(){
   NET.busy=false;
 }
 // mirror screens send what you do here to the screen running Ember (the animation still plays locally)
-function relay(action,extra){ if(isFollower()) api(`/api/pet/${action}`,{by:`${S.name}'s ${R.label.toLowerCase()} screen`,...(extra||{})}).catch(()=>{}); }
+function relay(action,extra){ if(!NET.on&&isFollower()&&LOCAL.ch){ LOCAL.ch.postMessage({type:'act',by:`${S.name}'s other tab`,action:{type:'pet',action,...(extra||{})}}); return; }
+  if(isFollower()) api(`/api/pet/${action}`,{by:`${S.name}'s ${R.label.toLowerCase()} screen`,...(extra||{})}).catch(()=>{}); }
 function applyServerConfig(cfg){
   NET.ha=true; backend=ServerBackend;
   if(cfg.ember) deepMerge(CONFIG,cfg.ember); if(cfg.ember&&cfg.ember.scenes) CONFIG.scenes=cfg.ember.scenes;
@@ -2256,6 +2288,7 @@ async function pullHA(){
       if(e.state!==x.state||JSON.stringify(e.attributes)!==JSON.stringify({...e.attributes,...x.attributes})) Home.set(x.entity_id,x.state,x.attributes); } }catch(e){}
 }
 async function netInit(){
+  localInit();
   if(!location.protocol.startsWith('http')) return;
   try{ const r=await fetch('/api/ping',{cache:'no-store'}); if(!r.ok) return; await r.json(); }catch(e){ return; }
   NET.on=true; KQ.lastId=undefined;
