@@ -541,7 +541,8 @@ impl Brain {
             "play_hit" => {
                 // the screen running the mini-game reports each boop/pop/beat/tickle
                 if self.s.activity.kind != "play" { return no("not_playing", "Not playing".into()); }
-                if !self.s.activity.owner.is_empty() && self.s.activity.owner != screen { return no("not_owner", "Another screen is running this game".into()); }
+                if self.s.activity.owner.is_empty() { self.s.activity.owner = screen.clone(); }   // started from a phone: the first screen to play along runs it
+                if self.s.activity.owner != screen { return no("not_owner", "Another screen is running this game".into()); }
                 if now - self.hits.0 > 1000.0 { self.hits = (now, 0); }
                 self.hits.1 += 1;
                 if self.hits.1 > 6 { return no("too_fast", "Too fast".into()); }
